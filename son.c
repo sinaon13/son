@@ -15,8 +15,8 @@ int repoExists(char *address)
     {
         if (strcmp(address, "C:\\") == 0)
         {
-            address = NULL;
             chdir(temp);
+            *address = '\0';
             return 1;
         }
         if (flag != 0)
@@ -31,6 +31,7 @@ int repoExists(char *address)
             if (strcmp(".son", dirs->d_name) == 0)
             {
                 chdir(temp);
+                strcpy(address + strlen(address), "\\.son");
                 return 0;
             }
         }
@@ -72,7 +73,9 @@ int alias_read(int argc, char *argv[])
     char temp_1[100], temp_2[100];
     while (fgets(line, 1000, global_alias) != NULL)
     {
-        sscanf(line, "%s %s - ", temp_1, temp_2);
+        sscanf(line, "%s", temp_1);
+        strcpy(temp_2, line + strlen(temp_1) + 1);
+        *(temp_2 + strlen(temp_2) - 1) = '\0';
         strcpy(global_als_list[total_global_als_count][0], temp_1);
         strcpy(global_als_list[total_global_als_count][1], temp_2);
         total_global_als_count++;
@@ -85,7 +88,9 @@ int alias_read(int argc, char *argv[])
     FILE *local_alias = fopen(wd, "r");
     while (fgets(line, 1000, local_alias) != NULL)
     {
-        sscanf(line, "%s %s", temp_1, temp_2);
+        sscanf(line, "%s", temp_1);
+        strcpy(temp_2, line + strlen(temp_1) + 1);
+        *(temp_2 + strlen(temp_2) - 1) = '\0';
         strcpy(als_list[total_als_count][0], temp_1);
         strcpy(als_list[total_als_count][1], temp_2);
         total_als_count++;
@@ -104,7 +109,10 @@ int alias_replace(int argc, char *argv[])
         for (int j = total_als_count - 1; j >= 0; j--)
         {
             if (strcmp(argv[i], als_list[j][0]) == 0)
+            {
+                argv[i] = malloc(100);
                 strcpy(argv[i], als_list[j][1]);
+            }
         }
     }
     // global
@@ -113,7 +121,10 @@ int alias_replace(int argc, char *argv[])
         for (int j = total_global_als_count - 1; j >= 0; j--)
         {
             if (strcmp(argv[i], global_als_list[j][0]) == 0)
+            {
+                argv[i] = malloc(100);
                 strcpy(argv[i], global_als_list[j][1]);
+            }
         }
     }
     return 0;
@@ -143,7 +154,7 @@ int userSettings(int argc, char *argv[])
         printf("%s\n", temp);
         if (strcmp(argv[2], "user.name") == 0)
         {
-            strcpy(temp + strlen(temp), "\\.son\\name.txt");
+            strcpy(temp + strlen(temp), "\\name.txt");
             printf("%s", temp);
             FILE *name = fopen(temp, "w");
             fprintf(name, "%s", argv[3]);
@@ -151,7 +162,7 @@ int userSettings(int argc, char *argv[])
         }
         if (strcmp(argv[2], "user.email") == 0)
         {
-            strcpy(temp + strlen(temp), "\\.son\\email.txt");
+            strcpy(temp + strlen(temp), "\\email.txt");
             printf("%s", temp);
             FILE *email = fopen(temp, "w");
             fprintf(email, "%s", argv[3]);
@@ -193,39 +204,39 @@ int alreadyExists(int argc, char *argv[], char name[])
 
 int makeRepo(int argc, char *argv[])
 {
-    char *address = (char *)malloc(1000);
-    if (repoExists(address) == 1)
-    {
-        mkdir(".son");
-    }
+    mkdir(".son");
     return 0;
 }
 
 int main(int argc, char *argv[])
 {
+    // repo address
+    char *repo_address = (char *)malloc(1000);
+    repoExists(repo_address);
+    printf("(%s)", repo_address);
+    // alias read
     alias_read(argc, argv);
-
+    // alias replace
     alias_replace(argc, argv);
-
-    // for (int i = 0; i < argc; i++)
-    // {
-    //     printf("%s ", argv[i]);
-    // }
-
+    // print argv
+    for (int i = 0; i < argc; i++)
+    {
+        printf("%s ", argv[i]);
+    }
+    // check validation
     if (validInput(argc, argv) == 0)
     {
         printf("Invalid Input!");
         return 1;
     }
-
-    if (strcmp(argv[1], "init") == 0 && argc == 2)
+    // check init
+    if (strcmp(argv[1], "init") == 0 && *repo_address == '\0')
     {
         makeRepo(argc, argv);
         return 0;
     }
 
-    char *temp_check = (char *)malloc(1000);
-    if (repoExists(temp_check) == 1)
+    if (repo_address == NULL)
     {
         printf("No repo found!");
         return 1;
@@ -234,10 +245,12 @@ int main(int argc, char *argv[])
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "user.") != NULL || strstr(argv[3], "user.") != NULL))
     {
         userSettings(argc, argv);
+        return 0;
     }
 
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "alias.") != NULL || strstr(argv[3], "alias.") != NULL))
     {
         alias_write(argc, argv);
+        return 0;
     }
 }
