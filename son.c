@@ -130,6 +130,80 @@ int alias_replace(int argc, char *argv[])
     return 0;
 }
 
+char type_of(char name[])
+{
+    DIR *currentDir = opendir(".");
+    struct dirent *dir;
+    while ((dir = readdir(currentDir)) != NULL)
+    {
+        if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+            return 'N';
+        if (strcmp(name, dir->d_name) == 0)
+            if (dir->d_type == 16)
+                return 'F';
+            else
+            {
+                return 'f';
+            }
+    }
+}
+
+int add_file(char file_name[], char copy_address[])
+{
+    char temp_copy_address[1000];
+    strcpy(temp_copy_address, copy_address);
+    char file_address[1000];
+    getcwd(file_address, 1000);
+    strcpy(file_address + strlen(file_address), "\\");
+    strcpy(file_address + strlen(file_address), file_name);
+    strcpy(copy_address + strlen(copy_address), "\\");
+    strcpy(copy_address + strlen(copy_address), file_name);
+    FILE *org, *copy;
+    org = fopen(file_address, "rb");
+    copy = fopen(copy_address, "wb");
+    strcpy(copy_address, temp_copy_address);
+    char buffer;
+    while (!feof(org))
+    {
+        fread(&buffer, sizeof(buffer), 1, org);
+        fwrite(&buffer, sizeof(buffer), 1, copy);
+    }
+    fclose(org);
+    fclose(copy);
+    return 0;
+}
+
+int add_folder(char folder_name[], char copy_address[])
+{
+    DIR *currentDir = opendir(".");
+    struct dirent *dir;
+    char wd[1000];
+    char temp_copy_address[1000];
+    strcpy(temp_copy_address, copy_address);
+    while ((dir = readdir(currentDir)) != NULL)
+    {
+        char type = type_of(dir->d_name);
+        if (type == 'F')
+        {
+            strcpy(temp_copy_address, copy_address);
+            strcpy(copy_address + strlen(copy_address), "\\");
+            strcpy(copy_address + strlen(copy_address), dir->d_name);
+            mkdir(copy_address);
+            getcwd(wd, 1000);
+            chdir(dir->d_name);
+            add_folder(dir->d_name, copy_address);
+            strcpy(copy_address, temp_copy_address);
+            chdir(wd);
+        }
+        else if (type == 'f')
+        {
+            add_file(dir->d_name, temp_copy_address);
+            strcpy(copy_address, temp_copy_address);
+        }
+    }
+    return 0;
+}
+
 int userSettings(int argc, char *argv[])
 {
     if (strcmp(argv[2], "-global") == 0)
@@ -187,10 +261,14 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 4 && strcmp(argv[1], "config") == 0 && (strstr(argv[2], "alias.") != NULL))
         return 1;
+    if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") != 0)
+        return 1;
+    if (argc > 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") == 0)
+        return 1;
     return 0;
 }
 
-int alreadyExists(int argc, char *argv[], char name[])
+int alreadyExists(char name[])
 {
     DIR *currentDir = opendir(".");
     struct dirent *dir;
@@ -205,6 +283,7 @@ int alreadyExists(int argc, char *argv[], char name[])
 int makeRepo(int argc, char *argv[])
 {
     mkdir(".son");
+    mkdir(".\\.son\\staging");
     return 0;
 }
 
@@ -213,44 +292,109 @@ int main(int argc, char *argv[])
     // repo address
     char *repo_address = (char *)malloc(1000);
     repoExists(repo_address);
-    printf("(%s)", repo_address);
     // alias read
     alias_read(argc, argv);
     // alias replace
     alias_replace(argc, argv);
-    // print argv
-    for (int i = 0; i < argc; i++)
+    // repo check
+    if (*repo_address == '\0' && (strcmp(argv[1], "init") != 0 || argc != 2))
     {
-        printf("%s ", argv[i]);
+        printf("No repo found!\n");
+        return 1;
     }
     // check validation
     if (validInput(argc, argv) == 0)
     {
-        printf("Invalid Input!");
+        printf("Invalid Input!\n");
         return 1;
     }
     // check init
-    if (strcmp(argv[1], "init") == 0 && *repo_address == '\0')
+    if (strcmp(argv[1], "init") == 0)
     {
-        makeRepo(argc, argv);
+        if (*repo_address == '\0')
+            makeRepo(argc, argv);
+        else
+            printf("Repo already exists!\n");
         return 0;
     }
-
-    if (repo_address == NULL)
-    {
-        printf("No repo found!");
-        return 1;
-    }
-
+    // user.name / user.email
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "user.") != NULL || strstr(argv[3], "user.") != NULL))
     {
         userSettings(argc, argv);
         return 0;
     }
-
+    // alias
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "alias.") != NULL || strstr(argv[3], "alias.") != NULL))
     {
         alias_write(argc, argv);
         return 0;
+    }
+    // add
+    if (strcmp(argv[1], "add") == 0)
+    {
+        int fail = 0;
+        char copy_adress[1000];
+        repoExists(copy_adress);
+        strcpy(copy_adress + strlen(copy_adress), "\\staging");
+        char temp_copy_address[1000];
+        strcpy(temp_copy_address, copy_adress);
+        char wd[1000];
+        getcwd(wd, 1000);
+        if (strcmp(argv[2], "-f") == 0)
+        {
+            for (int i = 3; i < argc; i++)
+            {
+                if (alreadyExists(argv[i]) == 0)
+                {
+                    fail++;
+                    printf("%s doesn't seem to exist!\n", argv[i]);
+                }
+                else
+                {
+                    if (type_of(argv[i]) == 'f')
+                    {
+                        add_file(argv[i], copy_adress);
+                        strcpy(copy_adress, temp_copy_address);
+                        chdir(wd);
+                    }
+                    else
+                    {
+                        strcpy(copy_adress + strlen(copy_adress), "\\");
+                        strcpy(copy_adress + strlen(copy_adress), argv[i]);
+                        mkdir(copy_adress);
+                        chdir(argv[i]);
+                        add_folder(argv[i], copy_adress);
+                        strcpy(copy_adress, temp_copy_address);
+                        chdir(wd);
+                    }
+                }
+            }
+            printf("%d folder/files were succesfully added to staging area.\n", argc - 3 - fail);
+        }
+        else
+        {
+            if (alreadyExists(argv[2]) == 0)
+                printf("%s doesn't seem to exist!\n", argv[2]);
+            else
+            {
+                if (type_of(argv[2]) == 'f')
+                {
+                    add_file(argv[2], copy_adress);
+                    strcpy(copy_adress, temp_copy_address);
+                    chdir(wd);
+                }
+                else
+                {
+                    strcpy(copy_adress + strlen(copy_adress), "\\");
+                    strcpy(copy_adress + strlen(copy_adress), argv[2]);
+                    mkdir(copy_adress);
+                    chdir(argv[2]);
+                    add_folder(argv[2], copy_adress);
+                    strcpy(copy_adress, temp_copy_address);
+                    chdir(wd);
+                }
+            }
+            printf("folder/file was succsesfully added to staging area.\n");
+        }
     }
 }
