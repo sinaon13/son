@@ -180,11 +180,14 @@ int copy_file(char file_name[], char org_address[], char copy_directory[])
     FILE *org, *copy;
     org = fopen(org_address, "rb");
     copy = fopen(copy_address, "wb");
-    int buffer;
-    while (!feof(org))
+    char buffer;
+    int n;
+    while (1)
     {
-        fread(&buffer, sizeof(buffer), 1, org);
-        fwrite(&buffer, sizeof(buffer), 1, copy);
+        if (feof(org))
+            break;
+        n = fread((void *)&buffer, sizeof(buffer), 1, org);
+        fwrite((void *)&buffer, sizeof(buffer), n, copy);
     }
     fclose(org);
     fclose(copy);
@@ -311,7 +314,59 @@ int file_changed(char file1[], char file2[])
     return 0;
 }
 
-int makeRepo(int argc, char *argv[])
+int commit_n_folder(int n)
+{
+    char commitfolder_address[1000];
+    repoExists(commitfolder_address);
+    char wd[1000];
+    strcpy(wd, commitfolder_address);
+    forward_one(commitfolder_address, "commit");
+    char *m = (char *)malloc(100);
+    sprintf(m, "%d", n);
+    strcpy(commitfolder_address + strlen(commitfolder_address), m);
+    mkdir(commitfolder_address);
+    *(wd + strlen(wd) - 5) = '\0';
+    DIR *currentDir = opendir(wd);
+    struct dirent *dir;
+    while ((dir = readdir(currentDir)) != NULL)
+    {
+        if (strcmp(dir->d_name, ".son") == 0)
+            continue;
+        char org_f_address[1000];
+        strcpy(org_f_address, wd);
+        char type = type_of(dir->d_name, org_f_address);
+        forward_one(org_f_address, dir->d_name);
+        if (type == 'F')
+            copy_folder(dir->d_name, org_f_address, commitfolder_address);
+        else if (type == 'f')
+            copy_file(dir->d_name, org_f_address, commitfolder_address);
+    }
+    return 0;
+}
+
+int cur_commit(char address[])
+{
+    char repo[1000];
+    repoExists(repo);
+    DIR *cur_dir = opendir(repo);
+    struct dirent *dir;
+    int max = 0, n;
+    while ((dir = readdir(cur_dir)) != NULL)
+    {
+        if (strstr(dir->d_name, "commit") != NULL)
+        {
+            sscanf(dir->d_name, "commit%d", &n);
+            if (n > max)
+                max = n;
+        }
+    }
+    char temp[100];
+    sprintf(temp, "commit%d", max);
+    forward_one(repo, temp);
+    strcpy(address, repo);
+}
+
+int makeRepo()
 {
     mkdir(".son");
     mkdir(".\\.son\\staging");
@@ -335,6 +390,20 @@ int makeRepo(int argc, char *argv[])
             copy_folder(dir->d_name, org_f_address, commit0_address);
         else if (type == 'f')
             copy_file(dir->d_name, org_f_address, commit0_address);
+    }
+    return 0;
+}
+
+int line_exists(char address[], char line[])
+{
+    FILE *file = fopen(address, "r");
+    char file_line[1000];
+    while (fgets(file_line, 1000, file) != NULL)
+    {
+        if (*(file_line + strlen(file_line) - 1) == '\n')
+            *(file_line + strlen(file_line) - 1) = '\0';
+        if (strcmp(file_line, line) == 0)
+            return 1;
     }
     return 0;
 }
@@ -380,11 +449,14 @@ int main(int argc, char *argv[])
     if (strcmp(argv[1], "init") == 0)
     {
         if (*repo_address == '\0')
-            makeRepo(argc, argv);
+            makeRepo();
         else
             printf("Repo already exists!\n");
         return 0;
     }
+    // find_curren_commit
+    char *cur_commit_address = (char *)malloc(1000);
+    cur_commit(cur_commit_address);
     // user.name / user.email
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "user.") != NULL || strstr(argv[3], "user.") != NULL))
     {
@@ -395,6 +467,96 @@ int main(int argc, char *argv[])
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "alias.") != NULL || strstr(argv[3], "alias.") != NULL))
     {
         alias_write(argc, argv);
+        return 0;
+    }
+    if (strcmp(argv[1], "add") == 0)
+    {
+        if (strcmp(argv[2], "-n") == 0)
+        {
+        }
+        int count = 0;
+        char type;
+        char org_f_address[1000];
+        char cur_commit_address[1000];
+        cur_commit(cur_commit_address);
+        char cwd[1000];
+        getcwd(cwd, 1000);
+        char temp[1000];
+        strcpy(temp, repo_address);
+        forward_one(temp, "added.txt");
+        FILE *added = fopen(temp, "a");
+        if (strcmp(argv[2], "-f") == 0)
+        {
+            for (int i = 3; i < argc; i++)
+            {
+                DIR *curr = opendir(".");
+                struct dirent *dir;
+                int flag = 0;
+                while ((dir = readdir(curr)) != NULL)
+                {
+                    if (strcmp(argv[i], dir->d_name) == 0)
+                    {
+                        flag = 1;
+                        strcpy(org_f_address, cwd);
+                        forward_one(org_f_address, dir->d_name);
+                        type = type_of(dir->d_name, cwd);
+                        if (type == 'F')
+                        {
+                            copy_folder(dir->d_name, org_f_address, cur_commit_address);
+                            if (line_exists(temp, org_f_address) == 0)
+                                fprintf(added, "%s\n", org_f_address);
+                        }
+                        else if (type == 'f')
+                        {
+                            copy_file(dir->d_name, org_f_address, cur_commit_address);
+                            if (line_exists(temp, org_f_address) == 0)
+                                fprintf(added, "%s\n", org_f_address);
+                        }
+                    }
+                }
+                if (flag == 0)
+                {
+                    printf("%s doesn't seem to exist!\n", argv[i]);
+                    count++;
+                }
+            }
+            printf("%d items were succsesfully added to staging area.\n", argc - 3 - count);
+        }
+        else
+        {
+            DIR *curr = opendir(".");
+            struct dirent *dir;
+            int flag = 0;
+            while ((dir = readdir(curr)) != NULL)
+            {
+                if (strcmp(argv[2], dir->d_name) == 0)
+                {
+                    flag = 1;
+                    strcpy(org_f_address, cwd);
+                    forward_one(org_f_address, dir->d_name);
+                    type = type_of(dir->d_name, cwd);
+                    if (type == 'F')
+                    {
+                        copy_folder(dir->d_name, org_f_address, cur_commit_address);
+                        if (line_exists(temp, org_f_address) == 0)
+                            fprintf(added, "%s\n", org_f_address);
+                    }
+                    else if (type == 'f')
+                    {
+                        copy_file(dir->d_name, org_f_address, cur_commit_address);
+                        if (line_exists(temp, org_f_address) == 0)
+                            fprintf(added, "%s\n", org_f_address);
+                    }
+                }
+            }
+            if (flag == 0)
+            {
+                printf("%s doesn't seem to exist!\n", argv[2]);
+            }
+            else
+                printf("%s was succsesfully added to staging area.\n", argv[2]);
+        }
+        fclose(added);
         return 0;
     }
 }
