@@ -130,9 +130,9 @@ int alias_replace(int argc, char *argv[])
     return 0;
 }
 
-char type_of(char name[])
+char type_of(char name[], char cur_address[])
 {
-    DIR *currentDir = opendir(".");
+    DIR *currentDir = opendir(cur_address);
     struct dirent *dir;
     while ((dir = readdir(currentDir)) != NULL)
     {
@@ -148,21 +148,39 @@ char type_of(char name[])
     }
 }
 
-int add_file(char file_name[], char copy_address[])
+int forward_one(char address[], char name[])
 {
-    char temp_copy_address[1000];
-    strcpy(temp_copy_address, copy_address);
-    char file_address[1000];
-    getcwd(file_address, 1000);
-    strcpy(file_address + strlen(file_address), "\\");
-    strcpy(file_address + strlen(file_address), file_name);
-    strcpy(copy_address + strlen(copy_address), "\\");
-    strcpy(copy_address + strlen(copy_address), file_name);
+    strcpy(address + strlen(address), "\\");
+    strcpy(address + strlen(address), name);
+    return 0;
+}
+
+int back_one(char address[])
+{
+    int index = strlen(address) - 1;
+    while (1)
+    {
+        if (*(address + index) == '\\')
+        {
+            *(address + index) = '\0';
+            return 0;
+        }
+        index--;
+        if (index == 0)
+            return 1;
+    }
+    return 1;
+}
+
+int copy_file(char file_name[], char org_address[], char copy_directory[])
+{
+    char copy_address[1000];
+    strcpy(copy_address, copy_directory);
+    forward_one(copy_address, file_name);
     FILE *org, *copy;
-    org = fopen(file_address, "rb");
+    org = fopen(org_address, "rb");
     copy = fopen(copy_address, "wb");
-    strcpy(copy_address, temp_copy_address);
-    char buffer;
+    int buffer;
     while (!feof(org))
     {
         fread(&buffer, sizeof(buffer), 1, org);
@@ -173,32 +191,25 @@ int add_file(char file_name[], char copy_address[])
     return 0;
 }
 
-int add_folder(char folder_name[], char copy_address[])
+int copy_folder(char folder_name[], char org_address[], char copy_directory[])
 {
-    DIR *currentDir = opendir(".");
+    char copy_address[1000];
+    strcpy(copy_address, copy_directory);
+    forward_one(copy_address, folder_name);
+    mkdir(copy_address);
+    DIR *currentDir = opendir(org_address);
     struct dirent *dir;
-    char wd[1000];
-    char temp_copy_address[1000];
-    strcpy(temp_copy_address, copy_address);
     while ((dir = readdir(currentDir)) != NULL)
     {
-        char type = type_of(dir->d_name);
+        char org_f_address[1000];
+        strcpy(org_f_address, org_address);
+        forward_one(org_f_address, dir->d_name);
+        char type = type_of(dir->d_name, org_address);
         if (type == 'F')
-        {
-            strcpy(temp_copy_address, copy_address);
-            strcpy(copy_address + strlen(copy_address), "\\");
-            strcpy(copy_address + strlen(copy_address), dir->d_name);
-            mkdir(copy_address);
-            getcwd(wd, 1000);
-            chdir(dir->d_name);
-            add_folder(dir->d_name, copy_address);
-            strcpy(copy_address, temp_copy_address);
-            chdir(wd);
-        }
+            copy_folder(dir->d_name, org_f_address, copy_address);
         else if (type == 'f')
         {
-            add_file(dir->d_name, temp_copy_address);
-            strcpy(copy_address, temp_copy_address);
+            copy_file(dir->d_name, org_f_address, copy_address);
         }
     }
     return 0;
@@ -280,28 +291,85 @@ int alreadyExists(char name[])
     return 0;
 }
 
+int file_changed(char file1[], char file2[])
+{
+    FILE *one, *two;
+    one = fopen(file1, "rb");
+    two = fopen(file2, "rb");
+    char buffer1, buffer2;
+    while (1)
+    {
+        if (feof(one) && feof(two))
+            return 0;
+        if (feof(one) || feof(two))
+            return 1;
+        fread(&buffer1, sizeof(buffer1), 1, one);
+        fread(&buffer2, sizeof(buffer2), 1, two);
+        if (buffer1 != buffer2)
+            return 1;
+    }
+    return 0;
+}
+
 int makeRepo(int argc, char *argv[])
 {
     mkdir(".son");
     mkdir(".\\.son\\staging");
+    mkdir(".\\.son\\commit0");
+    char commit0_address[1000];
+    getcwd(commit0_address, 1000);
+    strcpy(commit0_address + strlen(commit0_address), "\\.son\\commit0");
+    char cwd[1000];
+    getcwd(cwd, 1000);
+    DIR *currentDir = opendir(".");
+    struct dirent *dir;
+    while ((dir = readdir(currentDir)) != NULL)
+    {
+        if (strcmp(dir->d_name, ".son") == 0)
+            continue;
+        char org_f_address[1000];
+        strcpy(org_f_address, cwd);
+        char type = type_of(dir->d_name, org_f_address);
+        forward_one(org_f_address, dir->d_name);
+        if (type == 'F')
+            copy_folder(dir->d_name, org_f_address, commit0_address);
+        else if (type == 'f')
+            copy_file(dir->d_name, org_f_address, commit0_address);
+    }
     return 0;
 }
+
+char items[100][1000];
+int total_items = 0;
 
 int main(int argc, char *argv[])
 {
     // repo address
     char *repo_address = (char *)malloc(1000);
     repoExists(repo_address);
-    // alias read
-    alias_read(argc, argv);
-    // alias replace
-    alias_replace(argc, argv);
     // repo check
     if (*repo_address == '\0' && (strcmp(argv[1], "init") != 0 || argc != 2))
     {
         printf("No repo found!\n");
         return 1;
     }
+    // items_list and command0
+    // back_one(repo_address);
+    // DIR *curr = opendir(repo_address);
+    // *(repo_address + strlen(repo_address)) = '\\';
+    // struct dirent *dir;
+    // while ((dir = readdir(curr)) != NULL)
+    // {
+    //     if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0)
+    //     {
+    //         strcpy(items[total_items], dir->d_name);
+    //         total_items++;
+    //     }
+    // }
+    // alias read
+    alias_read(argc, argv);
+    // alias replace
+    alias_replace(argc, argv);
     // check validation
     if (validInput(argc, argv) == 0)
     {
@@ -328,73 +396,5 @@ int main(int argc, char *argv[])
     {
         alias_write(argc, argv);
         return 0;
-    }
-    // add
-    if (strcmp(argv[1], "add") == 0)
-    {
-        int fail = 0;
-        char copy_adress[1000];
-        repoExists(copy_adress);
-        strcpy(copy_adress + strlen(copy_adress), "\\staging");
-        char temp_copy_address[1000];
-        strcpy(temp_copy_address, copy_adress);
-        char wd[1000];
-        getcwd(wd, 1000);
-        if (strcmp(argv[2], "-f") == 0)
-        {
-            for (int i = 3; i < argc; i++)
-            {
-                if (alreadyExists(argv[i]) == 0)
-                {
-                    fail++;
-                    printf("%s doesn't seem to exist!\n", argv[i]);
-                }
-                else
-                {
-                    if (type_of(argv[i]) == 'f')
-                    {
-                        add_file(argv[i], copy_adress);
-                        strcpy(copy_adress, temp_copy_address);
-                        chdir(wd);
-                    }
-                    else
-                    {
-                        strcpy(copy_adress + strlen(copy_adress), "\\");
-                        strcpy(copy_adress + strlen(copy_adress), argv[i]);
-                        mkdir(copy_adress);
-                        chdir(argv[i]);
-                        add_folder(argv[i], copy_adress);
-                        strcpy(copy_adress, temp_copy_address);
-                        chdir(wd);
-                    }
-                }
-            }
-            printf("%d folder/files were succesfully added to staging area.\n", argc - 3 - fail);
-        }
-        else
-        {
-            if (alreadyExists(argv[2]) == 0)
-                printf("%s doesn't seem to exist!\n", argv[2]);
-            else
-            {
-                if (type_of(argv[2]) == 'f')
-                {
-                    add_file(argv[2], copy_adress);
-                    strcpy(copy_adress, temp_copy_address);
-                    chdir(wd);
-                }
-                else
-                {
-                    strcpy(copy_adress + strlen(copy_adress), "\\");
-                    strcpy(copy_adress + strlen(copy_adress), argv[2]);
-                    mkdir(copy_adress);
-                    chdir(argv[2]);
-                    add_folder(argv[2], copy_adress);
-                    strcpy(copy_adress, temp_copy_address);
-                    chdir(wd);
-                }
-            }
-            printf("folder/file was succsesfully added to staging area.\n");
-        }
     }
 }
