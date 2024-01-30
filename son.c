@@ -45,6 +45,7 @@ int alias_write(int argc, char *argv[])
     {
         FILE *alias = fopen("C:\\son\\alias.txt", "a");
         fprintf(alias, "%s %s\n", argv[3] + 6, argv[4]);
+        printf("%s is now an alias to %s.", argv[3] + 6, argv[4]);
         fclose(alias);
     }
     else
@@ -54,6 +55,7 @@ int alias_write(int argc, char *argv[])
         strcpy(wd + strlen(wd), "\\alias.txt");
         FILE *alias = fopen(wd, "a");
         fprintf(alias, "%s %s\n", argv[2] + 6, argv[3]);
+        printf("%s is now an alias to %s.", argv[2] + 6, argv[3]);
         fclose(alias);
         free(wd);
     }
@@ -101,33 +103,124 @@ int alias_read(int argc, char *argv[])
     return 0;
 }
 
+int count_words(char arg[])
+{
+    int count = 0;
+    if (*arg != ' ')
+        count++;
+    for (int i = 0; i < strlen(arg) - 1; i++)
+    {
+        if (*(arg + i) == ' ' && *(arg + i + 1) != ' ')
+            count++;
+    }
+    return count;
+}
+
+int separator(char arg[], char sep[][1000])
+{
+    int count = 0;
+    if (*arg != ' ')
+    {
+        for (int j = 1; j < strlen(arg); j++)
+        {
+            if (*(arg + j) == ' ' && *(arg + j - 1) != ' ')
+            {
+                memcpy(sep[count], arg, j);
+                *(sep[count] + j) = '\0';
+                count++;
+                break;
+            }
+            if (j == strlen(arg) - 1)
+            {
+                memcpy(sep[count], arg, j + 1);
+                *(sep[count] + j + 1) = '\0';
+                count++;
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < strlen(arg) - 1; i++)
+    {
+        if (*(arg + i) == ' ' && *(arg + i + 1) != ' ')
+        {
+            for (int j = i + 1; j < strlen(arg); j++)
+            {
+                if (*(arg + j) == ' ' && *(arg + j - 1) != ' ')
+                {
+                    memcpy(sep[count], arg + i + 1, j - i - 1);
+                    *(sep[count] + j - i - 1) = '\0';
+                    count++;
+                    break;
+                }
+                if (j == strlen(arg) - 1)
+                {
+                    memcpy(sep[count], arg + i + 1, j - i);
+                    *(sep[count] + j - i) = '\0';
+                    count++;
+                }
+            }
+        }
+    }
+}
+
 int alias_replace(int argc, char *argv[])
 {
     // local
+    int done[100] = {0};
     for (int i = 1; i < argc; i++)
     {
         for (int j = total_als_count - 1; j >= 0; j--)
         {
             if (strcmp(argv[i], als_list[j][0]) == 0)
             {
-                argv[i] = malloc(100);
-                strcpy(argv[i], als_list[j][1]);
+                int n = count_words(als_list[j][1]);
+                char sep[n][1000];
+                separator(als_list[j][1], sep);
+                for (int k = argc - 1; k > i; k--)
+                {
+                    argv[k + n - 1] = (char *)malloc(1000);
+                    strcpy(argv[k + n - 1], argv[k]);
+                }
+                for (int k = i; k < n + i; k++)
+                {
+                    argv[k] = (char *)malloc(1000);
+                    strcpy(argv[k], sep[k - i]);
+                    done[k] = 1;
+                }
+                argc += n - 1;
+                i += n - 1;
             }
         }
     }
     // global
     for (int i = 1; i < argc; i++)
     {
+        if (done[i] == 1)
+            continue;
         for (int j = total_global_als_count - 1; j >= 0; j--)
         {
             if (strcmp(argv[i], global_als_list[j][0]) == 0)
             {
-                argv[i] = malloc(100);
-                strcpy(argv[i], global_als_list[j][1]);
+                int n = count_words(als_list[j][1]);
+                char sep[n][1000];
+                separator(global_als_list[j][1], sep);
+                for (int k = argc - 1; k > i; k--)
+                {
+                    argv[k + n - 1] = (char *)malloc(1000);
+                    strcpy(argv[k + n - 1], argv[k]);
+                }
+                for (int k = i; k < n + i; k++)
+                {
+                    argv[k] = (char *)malloc(1000);
+                    strcpy(argv[k], sep[k - i]);
+                }
+                argc += n - 1;
+                i += n - 1;
             }
         }
     }
-    return 0;
+
+    return argc;
 }
 
 char type_of(char name[], char cur_address[])
@@ -211,9 +304,7 @@ int copy_folder(char folder_name[], char org_address[], char copy_directory[])
         if (type == 'F')
             copy_folder(dir->d_name, org_f_address, copy_address);
         else if (type == 'f')
-        {
             copy_file(dir->d_name, org_f_address, copy_address);
-        }
     }
     return 0;
 }
@@ -275,11 +366,13 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 4 && strcmp(argv[1], "config") == 0 && (strstr(argv[2], "alias.") != NULL))
         return 1;
-    if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-n") != 0)
+    if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-n") != 0 && strcmp(argv[2], "-redo") != 0)
         return 1;
     if (argc > 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") == 0)
         return 1;
     if (argc == 4 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-n") == 0)
+        return 1;
+    if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-redo") == 0)
         return 1;
     return 0;
 }
@@ -427,7 +520,6 @@ int makeRepo()
     char cwd[1000];
     getcwd(cwd, 1000);
     mkdir(".son");
-    mkdir(".\\.son\\staging");
     FILE *repo_address = fopen(".\\.son\\repo_address.txt", "w");
     fprintf(repo_address, "%s", cwd);
     fclose(repo_address);
@@ -450,6 +542,7 @@ int makeRepo()
         else if (type == 'f')
             copy_file(dir->d_name, org_f_address, commit0_address);
     }
+    commit_n_folder(1);
     printf("A new repo was succsesfully made.\n");
     return 0;
 }
@@ -468,7 +561,7 @@ int line_exists(char address[], char line[])
     return 0;
 }
 
-int append_added(FILE *file, char address[], int depth)
+int append_added(FILE *file, char address[])
 {
     DIR *cur_folder = opendir(address);
     struct dirent *d;
@@ -481,18 +574,17 @@ int append_added(FILE *file, char address[], int depth)
         char temp[1000], temp_line[1000];
         strcpy(temp, address);
         forward_one(temp, d->d_name);
-        sprintf(temp_line, "%d %s", depth, temp);
+        sprintf(temp_line, "%s", temp);
         type = type_of(d->d_name, address);
         if (line_exists(added, temp_line) == 0)
             if (type == 'F')
             {
-                fprintf(file, "%d %s\n", depth, temp);
-                append_added(file, temp, ++depth);
-                depth--;
+                fprintf(file, "%s\n", temp);
+                append_added(file, temp);
             }
             else if (type == 'f')
             {
-                fprintf(file, "%d %s\n", depth, temp);
+                fprintf(file, "%s\n", temp);
             }
     }
     return 0;
@@ -515,6 +607,7 @@ int check_if_staged_or_modified(char type, char address[])
 {
     char cur_commit_address[1000];
     cur_commit(cur_commit_address);
+    printf("(%s)\n", cur_commit_address);
     char t[1000];
     repoExists(t);
     forward_one(t, "repo_address.txt");
@@ -601,6 +694,20 @@ int append_added_n(FILE *file, char address[], int depth, int max_depth)
     return 0;
 }
 
+int repo_to_commit(char address[])
+{
+    char cur[1000];
+    cur_commit(cur);
+    char temp[1000];
+    repoExists(temp);
+    back_one(temp);
+    char temp_address[1000];
+    strcpy(temp_address, address);
+    strcpy(temp_address, temp_address + strlen(temp));
+    strcpy(cur + strlen(cur), temp_address);
+    strcpy(address, cur);
+}
+
 int main(int argc, char *argv[])
 {
     // repo address
@@ -615,7 +722,7 @@ int main(int argc, char *argv[])
     // alias read
     alias_read(argc, argv);
     // alias replace
-    alias_replace(argc, argv);
+    argc = alias_replace(argc, argv);
     // check validation
     if (validInput(argc, argv) == 0)
     {
@@ -651,8 +758,6 @@ int main(int argc, char *argv[])
         int count = 0;
         char type;
         char org_f_address[1000];
-        char cur_commit_address[1000];
-        cur_commit(cur_commit_address);
         char cwd[1000];
         getcwd(cwd, 1000);
         char temp[1000];
@@ -740,18 +845,22 @@ int main(int argc, char *argv[])
                         type = type_of(dir->d_name, cwd);
                         char temp_line[1000];
                         sprintf(temp_line, "1 %s", org_f_address);
+                        char cur_commit_address[1000];
+                        strcpy(cur_commit_address, org_f_address);
+                        repo_to_commit(cur_commit_address);
+                        back_one(cur_commit_address);
                         if (type == 'F')
                         {
                             copy_folder(dir->d_name, org_f_address, cur_commit_address);
                             if (line_exists(temp, temp_line) == 0)
-                                fprintf(added, "1 %s\n", org_f_address);
-                            append_added(added, org_f_address, 2);
+                                fprintf(added, "%s\n", org_f_address);
+                            append_added(added, org_f_address);
                         }
                         else if (type == 'f')
                         {
                             copy_file(dir->d_name, org_f_address, cur_commit_address);
                             if (line_exists(temp, temp_line) == 0)
-                                fprintf(added, "1 %s\n", org_f_address);
+                                fprintf(added, "%s\n", org_f_address);
                         }
                     }
                 }
@@ -762,6 +871,45 @@ int main(int argc, char *argv[])
                 }
             }
             printf("%d items were succsesfully added to staging area.\n", argc - 3 - count);
+        }
+        else if (strcmp(argv[2], "-redo") == 0)
+        {
+            fclose(added);
+            FILE *a = fopen(temp, "r");
+            char address[1000];
+            while (fgets(address, 1000, a) != NULL)
+            {
+                if (*(address + strlen(address) - 1) == '\n')
+                    *(address + strlen(address) - 1) = '\0';
+                char temp_up_address[1000];
+                char name[1000];
+                strcpy(temp_up_address, address);
+                back_one(temp_up_address);
+                strcpy(name, address);
+                last_maker(name);
+                char type = type_of(name, temp_up_address);
+                int stg;
+                if (type == 'F')
+                    stg = check_if_staged_or_modified('F', address);
+                else if (type == 'f')
+                    stg = check_if_staged_or_modified('f', address);
+                printf("(%s)(%d)\n", name, stg);
+                if (stg != 1)
+                {
+                    char org[1000];
+                    strcpy(org, address);
+                    repo_to_commit(org);
+                    char file_name[1000];
+                    strcpy(file_name, org);
+                    last_maker(file_name);
+                    back_one(address);
+                    if (type == 'f')
+                        copy_file(file_name, org, address);
+                    else if (type == 'F')
+                        copy_folder(file_name, org, address);
+                }
+            }
+            fclose(a);
         }
         else
         {
@@ -778,18 +926,22 @@ int main(int argc, char *argv[])
                     type = type_of(dir->d_name, cwd);
                     char temp_line[1000];
                     sprintf(temp_line, "1 %s", org_f_address);
+                    char cur_commit_address[1000];
+                    strcpy(cur_commit_address, org_f_address);
+                    repo_to_commit(cur_commit_address);
+                    back_one(cur_commit_address);
                     if (type == 'F')
                     {
                         copy_folder(dir->d_name, org_f_address, cur_commit_address);
                         if (line_exists(temp, temp_line) == 0)
-                            fprintf(added, "1 %s\n", org_f_address);
-                        append_added(added, org_f_address, 2);
+                            fprintf(added, "%s\n", org_f_address);
+                        append_added(added, org_f_address);
                     }
                     else if (type == 'f')
                     {
                         copy_file(dir->d_name, org_f_address, cur_commit_address);
                         if (line_exists(temp, temp_line) == 0)
-                            fprintf(added, "1 %s\n", org_f_address);
+                            fprintf(added, "%s\n", org_f_address);
                     }
                 }
             }
