@@ -275,16 +275,18 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 4 && strcmp(argv[1], "config") == 0 && (strstr(argv[2], "alias.") != NULL))
         return 1;
-    if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") != 0)
+    if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-n") != 0)
         return 1;
     if (argc > 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-f") == 0)
+        return 1;
+    if (argc == 4 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-n") == 0)
         return 1;
     return 0;
 }
 
-int alreadyExists(char name[])
+int alreadyExists(char name[], char address[])
 {
-    DIR *currentDir = opendir(".");
+    DIR *currentDir = opendir(address);
     struct dirent *dir;
     while ((dir = readdir(currentDir)) != NULL)
     {
@@ -300,17 +302,71 @@ int file_changed(char file1[], char file2[])
     one = fopen(file1, "rb");
     two = fopen(file2, "rb");
     char buffer1, buffer2;
+    int index = 0;
     while (1)
     {
+        index++;
         if (feof(one) && feof(two))
             return 0;
         if (feof(one) || feof(two))
             return 1;
         fread(&buffer1, sizeof(buffer1), 1, one);
         fread(&buffer2, sizeof(buffer2), 1, two);
-        if (buffer1 != buffer2)
+        if (buffer1 != buffer2 && index != 1)
             return 1;
     }
+    return 0;
+}
+
+int folder_changed(char folder1[], char folder2[])
+{
+    DIR *Folder1 = opendir(folder1);
+    struct dirent *f1;
+    int done[1000] = {0};
+    int flag, index = 0;
+    int b[1000] = {0};
+    while ((f1 = readdir(Folder1)) != NULL)
+    {
+        if (strcmp(f1->d_name, ".") != 0 && strcmp(f1->d_name, "..") != 0 && strcmp(f1->d_name, ".son") != 0)
+        {
+            flag = 0;
+            DIR *Folder2 = opendir(folder2);
+            struct dirent *f2;
+            index = 0;
+            while ((f2 = readdir(Folder2)) != NULL)
+            {
+                if (strcmp(f2->d_name, ".") != 0 && strcmp(f2->d_name, "..") != 0 && strcmp(f2->d_name, ".son") != 0)
+                {
+                    if (strcmp(f1->d_name, f2->d_name) == 0)
+                    {
+                        b[index] = 1;
+                        flag = 1;
+                        char temp1[1000], temp2[1000];
+                        strcpy(temp1, folder1);
+                        forward_one(temp1, f1->d_name);
+                        strcpy(temp2, folder2);
+                        forward_one(temp2, f2->d_name);
+                        if (f1->d_type == 16 && f2->d_type == 16)
+                        {
+                            if (folder_changed(temp1, temp2) == 1)
+                                return 1;
+                        }
+                        else if (file_changed(temp1, temp2) == 1)
+                            return 1;
+                    }
+                    index++;
+                }
+            }
+            if (flag == 0)
+                return 1;
+        }
+    }
+    for (int i = 0; i < index; i++)
+    {
+        if (b[i] != 1)
+            return 1;
+    }
+
     return 0;
 }
 
@@ -368,14 +424,17 @@ int cur_commit(char address[])
 
 int makeRepo()
 {
+    char cwd[1000];
+    getcwd(cwd, 1000);
     mkdir(".son");
     mkdir(".\\.son\\staging");
+    FILE *repo_address = fopen(".\\.son\\repo_address.txt", "w");
+    fprintf(repo_address, "%s", cwd);
+    fclose(repo_address);
     mkdir(".\\.son\\commit0");
     char commit0_address[1000];
     getcwd(commit0_address, 1000);
     strcpy(commit0_address + strlen(commit0_address), "\\.son\\commit0");
-    char cwd[1000];
-    getcwd(cwd, 1000);
     DIR *currentDir = opendir(".");
     struct dirent *dir;
     while ((dir = readdir(currentDir)) != NULL)
@@ -391,6 +450,7 @@ int makeRepo()
         else if (type == 'f')
             copy_file(dir->d_name, org_f_address, commit0_address);
     }
+    printf("A new repo was succsesfully made.\n");
     return 0;
 }
 
@@ -408,8 +468,138 @@ int line_exists(char address[], char line[])
     return 0;
 }
 
-char items[100][1000];
-int total_items = 0;
+int append_added(FILE *file, char address[], int depth)
+{
+    DIR *cur_folder = opendir(address);
+    struct dirent *d;
+    char type;
+    char added[1000];
+    repoExists(added);
+    forward_one(added, "added.txt");
+    while ((d = readdir(cur_folder)) != NULL)
+    {
+        char temp[1000], temp_line[1000];
+        strcpy(temp, address);
+        forward_one(temp, d->d_name);
+        sprintf(temp_line, "%d %s", depth, temp);
+        type = type_of(d->d_name, address);
+        if (line_exists(added, temp_line) == 0)
+            if (type == 'F')
+            {
+                fprintf(file, "%d %s\n", depth, temp);
+                append_added(file, temp, ++depth);
+                depth--;
+            }
+            else if (type == 'f')
+            {
+                fprintf(file, "%d %s\n", depth, temp);
+            }
+    }
+    return 0;
+}
+
+int last_maker(char address[])
+{
+    for (int i = strlen(address) - 1; i >= 0; i--)
+    {
+        if (*(address + i) == '\\')
+        {
+            strcpy(address, address + i + 1);
+            return 0;
+        }
+    }
+    return 0;
+}
+
+int check_if_staged_or_modified(char type, char address[])
+{
+    char cur_commit_address[1000];
+    cur_commit(cur_commit_address);
+    char t[1000];
+    repoExists(t);
+    forward_one(t, "repo_address.txt");
+    FILE *repo_ress = fopen(t, "r");
+    char repo_address[1000];
+    fgets(repo_address, 1000, repo_ress);
+    char temp[1000];
+    strcpy(temp, address + strlen(repo_address));
+    strcpy(cur_commit_address + strlen(cur_commit_address), temp);
+    int yn;
+    char name[1000];
+    strcpy(name, address);
+    last_maker(name);
+    char temp_address_already[1000];
+    strcpy(temp_address_already, cur_commit_address);
+    back_one(temp_address_already);
+    if (alreadyExists(name, temp_address_already) == 0)
+        return 0;
+    if (type == 'f')
+        yn = file_changed(address, cur_commit_address);
+    else
+        yn = folder_changed(address, cur_commit_address);
+    if (yn == 0)
+        return 1;
+    else
+        return 0;
+}
+
+int append_added_n(FILE *file, char address[], int depth, int max_depth)
+{
+    if (depth == max_depth + 1)
+        return 0;
+    DIR *cur_folder = opendir(address);
+    struct dirent *d;
+    char type;
+    char added[1000];
+    repoExists(added);
+    forward_one(added, "added_n.txt");
+    while ((d = readdir(cur_folder)) != NULL)
+    {
+        char temp[1000], temp_line[1000];
+        strcpy(temp, address);
+        forward_one(temp, d->d_name);
+        sprintf(temp_line, "%d %s", depth, temp);
+        type = type_of(d->d_name, address);
+        if (type == 'F' || type == 'f')
+        {
+            int stg;
+            if (type == 'F')
+                stg = check_if_staged_or_modified('F', temp);
+            else
+                stg = check_if_staged_or_modified('f', temp);
+            char werid_temp[1000];
+            sprintf(werid_temp, "%d %s", depth, temp);
+            int add = line_exists(added, werid_temp);
+            char state[1000];
+            if (stg == 1 && add == 1)
+                strcpy(state, "--> staged");
+            else
+                strcpy(state, "--> Not staged");
+            char temp_2[1000];
+            strcpy(temp_2, temp);
+            last_maker(temp_2);
+            printf("\n");
+            for (int i = 0; i < depth; i++)
+                printf("    ");
+            printf("%d %s %s", depth, temp_2, state);
+        }
+        if (type == 'F')
+        {
+            if (line_exists(added, temp_line) == 0)
+            {
+                fprintf(file, "%d %s\n", depth, temp);
+            }
+            append_added_n(file, temp, ++depth, max_depth);
+            depth--;
+        }
+        else if (type == 'f')
+        {
+            if (line_exists(added, temp_line) == 0)
+                fprintf(file, "%d %s\n", depth, temp);
+        }
+    }
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -422,19 +612,6 @@ int main(int argc, char *argv[])
         printf("No repo found!\n");
         return 1;
     }
-    // items_list and command0
-    // back_one(repo_address);
-    // DIR *curr = opendir(repo_address);
-    // *(repo_address + strlen(repo_address)) = '\\';
-    // struct dirent *dir;
-    // while ((dir = readdir(curr)) != NULL)
-    // {
-    //     if (strcmp(dir->d_name, ".") != 0 && strcmp(dir->d_name, "..") != 0)
-    //     {
-    //         strcpy(items[total_items], dir->d_name);
-    //         total_items++;
-    //     }
-    // }
     // alias read
     alias_read(argc, argv);
     // alias replace
@@ -454,7 +631,7 @@ int main(int argc, char *argv[])
             printf("Repo already exists!\n");
         return 0;
     }
-    // find_curren_commit
+    // find_current_commit
     char *cur_commit_address = (char *)malloc(1000);
     cur_commit(cur_commit_address);
     // user.name / user.email
@@ -471,9 +648,6 @@ int main(int argc, char *argv[])
     }
     if (strcmp(argv[1], "add") == 0)
     {
-        if (strcmp(argv[2], "-n") == 0)
-        {
-        }
         int count = 0;
         char type;
         char org_f_address[1000];
@@ -484,8 +658,72 @@ int main(int argc, char *argv[])
         char temp[1000];
         strcpy(temp, repo_address);
         forward_one(temp, "added.txt");
+        char temp_n[1000];
+        strcpy(temp_n, repo_address);
+        forward_one(temp_n, "added_n.txt");
         FILE *added = fopen(temp, "a");
-        if (strcmp(argv[2], "-f") == 0)
+        FILE *added_n = fopen(temp_n, "a");
+        if (strcmp(argv[2], "-n") == 0)
+        {
+            DIR *curr = opendir(".");
+            struct dirent *dir;
+            while ((dir = readdir(curr)) != NULL)
+            {
+                if (strcmp(dir->d_name, ".son") == 0)
+                    continue;
+                strcpy(org_f_address, cwd);
+                forward_one(org_f_address, dir->d_name);
+                type = type_of(dir->d_name, cwd);
+                char temp_line[1000];
+                sprintf(temp_line, "1 %s", org_f_address);
+                if (type == 'F')
+                {
+                    int stg = check_if_staged_or_modified('F', org_f_address);
+                    char werid_temp[1000];
+                    sprintf(werid_temp, "1 %s", org_f_address);
+                    int add = line_exists(temp_n, werid_temp);
+                    char state[1000];
+                    if (stg == 1 && add == 1)
+                        strcpy(state, "--> staged");
+                    else
+                        strcpy(state, "--> Not staged");
+                    char temp[1000];
+                    strcpy(temp, org_f_address);
+                    last_maker(temp);
+                    printf("\n    1 %s %s", temp, state);
+                    if (line_exists(temp_n, temp_line) == 0)
+                        fprintf(added_n, "1 %s\n", org_f_address);
+                    int pow = 1;
+                    int max_depth = 0;
+                    for (int i = strlen(argv[3]) - 1; i >= 0; i--)
+                    {
+                        max_depth += pow * (*(argv[3] + i) - '0');
+                        pow *= 10;
+                    }
+                    append_added_n(added_n, org_f_address, 2, max_depth);
+                }
+                else if (type == 'f')
+                {
+                    int stg = check_if_staged_or_modified('f', org_f_address);
+                    char werid_temp[1000];
+                    sprintf(werid_temp, "1 %s", org_f_address);
+                    int add = line_exists(temp_n, werid_temp);
+                    char state[1000];
+                    if (stg == 1 && add == 1)
+                        strcpy(state, "--> staged");
+                    else
+                        strcpy(state, "--> Not staged");
+                    char temp[1000];
+                    strcpy(temp, org_f_address);
+                    last_maker(temp);
+                    printf("\n    1 %s %s", temp, state);
+                    if (line_exists(temp_n, temp_line) == 0)
+                        fprintf(added_n, "1 %s\n", org_f_address);
+                }
+            }
+            return 0;
+        }
+        else if (strcmp(argv[2], "-f") == 0)
         {
             for (int i = 3; i < argc; i++)
             {
@@ -500,17 +738,20 @@ int main(int argc, char *argv[])
                         strcpy(org_f_address, cwd);
                         forward_one(org_f_address, dir->d_name);
                         type = type_of(dir->d_name, cwd);
+                        char temp_line[1000];
+                        sprintf(temp_line, "1 %s", org_f_address);
                         if (type == 'F')
                         {
                             copy_folder(dir->d_name, org_f_address, cur_commit_address);
-                            if (line_exists(temp, org_f_address) == 0)
-                                fprintf(added, "%s\n", org_f_address);
+                            if (line_exists(temp, temp_line) == 0)
+                                fprintf(added, "1 %s\n", org_f_address);
+                            append_added(added, org_f_address, 2);
                         }
                         else if (type == 'f')
                         {
                             copy_file(dir->d_name, org_f_address, cur_commit_address);
-                            if (line_exists(temp, org_f_address) == 0)
-                                fprintf(added, "%s\n", org_f_address);
+                            if (line_exists(temp, temp_line) == 0)
+                                fprintf(added, "1 %s\n", org_f_address);
                         }
                     }
                 }
@@ -535,17 +776,20 @@ int main(int argc, char *argv[])
                     strcpy(org_f_address, cwd);
                     forward_one(org_f_address, dir->d_name);
                     type = type_of(dir->d_name, cwd);
+                    char temp_line[1000];
+                    sprintf(temp_line, "1 %s", org_f_address);
                     if (type == 'F')
                     {
                         copy_folder(dir->d_name, org_f_address, cur_commit_address);
-                        if (line_exists(temp, org_f_address) == 0)
-                            fprintf(added, "%s\n", org_f_address);
+                        if (line_exists(temp, temp_line) == 0)
+                            fprintf(added, "1 %s\n", org_f_address);
+                        append_added(added, org_f_address, 2);
                     }
                     else if (type == 'f')
                     {
                         copy_file(dir->d_name, org_f_address, cur_commit_address);
-                        if (line_exists(temp, org_f_address) == 0)
-                            fprintf(added, "%s\n", org_f_address);
+                        if (line_exists(temp, temp_line) == 0)
+                            fprintf(added, "1 %s\n", org_f_address);
                     }
                 }
             }
