@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <dirent.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <stdlib.h>
+#include <time.h>
 
 int repoExists(char *address)
 {
@@ -315,15 +314,32 @@ int userSettings(int argc, char *argv[])
     {
         if (strcmp(argv[3], "user.name") == 0)
         {
-            FILE *name = fopen("C:\\son\\name.txt", "w");
-            fprintf(name, "%s", argv[4]);
-            fclose(name);
+            FILE *all = fopen("c:\\son\\repos.txt", "r");
+            char n[1000];
+            while (fgets(n, 1000, all) != NULL)
+            {
+                if (*(n + strlen(n) - 1) == '\n')
+                    *(n + strlen(n) - 1) = '\0';
+                printf("(%s)", n);
+                forward_one(n, ".son\\name.txt");
+                FILE *name = fopen(n, "w");
+                fprintf(name, "%s", argv[4]);
+                fclose(name);
+            }
         }
         if (strcmp(argv[3], "user.email") == 0)
         {
-            FILE *email = fopen("C:\\son\\email.txt", "w");
-            fprintf(email, "%s", argv[4]);
-            fclose(email);
+            FILE *all = fopen("c:\\son\\repos.txt", "r");
+            char n[1000];
+            while (fgets(n, 1000, all) != NULL)
+            {
+                if (*(n + strlen(n) - 1) == '\n')
+                    *(n + strlen(n) - 1) = '\0';
+                forward_one(n, ".son\\email.txt");
+                FILE *email = fopen(n, "w");
+                fprintf(email, "%s", argv[4]);
+                fclose(email);
+            }
         }
     }
     else
@@ -356,9 +372,9 @@ int validInput(int argc, char *argv[])
         return 0;
     if (strcmp(argv[0], "son") != 0)
         return 0;
-    if (argc == 5 && strcmp(argv[1], "config") == 0 && strcmp(argv[2], "-global") == 0 && (strcmp(argv[3], "user.email") == 0 || strcmp(argv[3], "user.name") == 0))
+    if (argc == 5 && strcmp(argv[1], "config") == 0 && strcmp(argv[2], "-global") == 0 && ((strcmp(argv[3], "user.email") == 0 || strcmp(argv[3], "user.name")) == 0))
         return 1;
-    if (argc == 4 && strcmp(argv[1], "config") == 0 && (strcmp(argv[2], "user.email") == 0 || strcmp(argv[2], "user.name") == 0))
+    if (argc == 4 && strcmp(argv[1], "config") == 0 && ((strcmp(argv[2], "user.email") == 0 || strcmp(argv[2], "user.name")) == 0))
         return 1;
     if (argc == 2 && strcmp(argv[1], "init") == 0)
         return 1;
@@ -375,6 +391,8 @@ int validInput(int argc, char *argv[])
     if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-redo") == 0)
         return 1;
     if (argc == 2 && strcmp(argv[1], "status") == 0)
+        return 1;
+    if (strcmp(argv[1], "commit") == 0 && strcmp(argv[2], "-m") == 0)
         return 1;
     return 0;
 }
@@ -519,6 +537,7 @@ int cur_commit(char address[])
     sprintf(temp, "commit%d", max);
     forward_one(repo, temp);
     strcpy(address, repo);
+    return max;
 }
 
 int last_commit(char address[])
@@ -541,6 +560,7 @@ int last_commit(char address[])
     sprintf(temp, "commit%d", max - 1);
     forward_one(repo, temp);
     strcpy(address, repo);
+    return max - 1;
 }
 
 int makeRepo()
@@ -551,6 +571,12 @@ int makeRepo()
     FILE *repo_address = fopen(".\\.son\\repo_address.txt", "w");
     fprintf(repo_address, "%s", cwd);
     fclose(repo_address);
+    FILE *cID = fopen(".\\.son\\commitID.txt", "w");
+    fprintf(cID, "%d\n", 1000);
+    fclose(cID);
+    FILE *repos = fopen("c:\\son\\repos.txt", "a");
+    fprintf(repos, "%s\n", cwd);
+    fclose(repos);
     mkdir(".\\.son\\commit0");
     char commit0_address[1000];
     getcwd(commit0_address, 1000);
@@ -571,7 +597,7 @@ int makeRepo()
             copy_file(dir->d_name, org_f_address, commit0_address);
     }
     commit_n_folder(1);
-    printf("A new repo was succsesfully made.\n");
+    printf("A new repo was succsessfully made.\n");
     return 0;
 }
 
@@ -759,6 +785,97 @@ int commit_to_repo(char address[])
     return 0;
 }
 
+int username_read(char username[])
+{
+    char dot_son[1000];
+    repoExists(dot_son);
+    if (alreadyExists("name.txt", dot_son) == 1)
+    {
+        forward_one(dot_son, "name.txt");
+        FILE *b = fopen(dot_son, "r");
+        fgets(username, 1000, b);
+        fclose(b);
+    }
+    else
+    {
+        printf("You haven't set any usernames yet!\n");
+        return 1;
+    }
+    if (*(username + strlen(username) - 1) == '\n')
+        *(username + strlen(username) - 1) = '\0';
+    return 0;
+}
+
+int cur_commitID()
+{
+    char dot_son[1000];
+    repoExists(dot_son);
+    forward_one(dot_son, "commitID.txt");
+    FILE *cID = fopen(dot_son, "r");
+    char IDstring[100];
+    int ID;
+    fgets(IDstring, 100, cID);
+    while (1)
+    {
+        sscanf(IDstring, "%d", &ID);
+        if (fgets(IDstring, 100, cID) == NULL)
+        {
+            fclose(cID);
+            return ID;
+        }
+    }
+}
+
+int commitfunc(char *argv3)
+{
+    char dot_son[1000];
+    repoExists(dot_son);
+    forward_one(dot_son, "added.txt");
+    FILE *added = fopen(dot_son, "r");
+    char a[1000];
+    char b = a[0];
+    fgets(a, 1000, added);
+    fclose(added);
+    if (a[0] != b)
+    {
+        int commitID = cur_commitID();
+        commitID++;
+        time_t mytime = time(NULL);
+        char *time_str = ctime(&mytime);
+        time_str[strlen(time_str) - 1] = '\0';
+        char name[1000];
+        if (username_read(name) == 1)
+            exit(1);
+        char commit_info_file[1000];
+        int n = cur_commit(commit_info_file);
+        forward_one(commit_info_file, "commitInfo.txt");
+        FILE *info = fopen(commit_info_file, "w");
+        fprintf(info, "%d\n%s\n%s\n%s", commitID, argv3, name, time_str);
+        printf("'''''''''''''''''''''''''''''''''''\n");
+        printf("Succsessful!\n\n");
+        printf("Commit ID --> %d\n\n", commitID);
+        printf("Commit message --> %s\n\n", argv3);
+        printf("Username --> %s\n\n", name);
+        printf("Time --> %s\n\n", time_str);
+        printf("'''''''''''''''''''''''''''''''''''");
+        fclose(info);
+        commit_n_folder(n + 1);
+        FILE *addednew = fopen(dot_son, "w");
+        fclose(addednew);
+        back_one(dot_son);
+        forward_one(dot_son, "commitId.txt");
+        FILE *ID = fopen(dot_son, "a");
+        fprintf(ID, "%d\n", commitID);
+        fclose(ID);
+        return 0;
+    }
+    else
+    {
+        printf("No changes have been made since the last commit.\n");
+        exit(1);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     // repo address
@@ -921,7 +1038,7 @@ int main(int argc, char *argv[])
                     count++;
                 }
             }
-            printf("%d items were succsesfully added to staging area.\n", argc - 3 - count);
+            printf("%d items were succsessfully added to staging area.\n", argc - 3 - count);
         }
         else if (strcmp(argv[2], "-redo") == 0)
         {
@@ -1000,7 +1117,7 @@ int main(int argc, char *argv[])
                 printf("%s doesn't seem to exist!\n", argv[2]);
             }
             else
-                printf("%s was succsesfully added to staging area.\n", argv[2]);
+                printf("%s was succsessfully added to staging area.\n", argv[2]);
         }
         fclose(added);
         return 0;
@@ -1110,5 +1227,20 @@ int main(int argc, char *argv[])
                 continue;
             }
         }
+    }
+    else if (strcmp(argv[1], "commit") == 0)
+    {
+        if (strlen(argv[3]) > 72)
+        {
+            printf("Commit message is too long! Try again with a message shorter than 73 characters.\n");
+            return 1;
+        }
+        if (argc == 3)
+        {
+            printf("Commit message is empty!\n");
+            return 1;
+        }
+        commitfunc(argv[3]);
+        return 0;
     }
 }
