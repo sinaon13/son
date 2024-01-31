@@ -54,11 +54,128 @@ int alias_write(int argc, char *argv[])
         strcpy(wd + strlen(wd), "\\alias.txt");
         FILE *alias = fopen(wd, "a");
         fprintf(alias, "%s %s\n", argv[2] + 6, argv[3]);
-        printf("%s is now an alias to %s.", argv[2] + 6, argv[3]);
+        printf("\"%s\" is now an alias to \"%s\".", argv[2] + 6, argv[3]);
         fclose(alias);
         free(wd);
     }
     return 0;
+}
+
+int shortcut_write(int argc, char *argv[])
+{
+    char wd[1000];
+    repoExists(wd);
+    strcpy(wd + strlen(wd), "\\shortcut.txt");
+    FILE *shortcut = fopen(wd, "a");
+    fprintf(shortcut, "%s %s\n", argv[5], argv[3]);
+    printf("\"%s\" is now a shortcut-message for \"%s\".", argv[5], argv[3]);
+    fclose(shortcut);
+    return 0;
+}
+
+int shortcut_replace(int argc, char *argv[])
+{
+    char wd[1000];
+    repoExists(wd);
+    strcpy(wd + strlen(wd), "\\shortcut.txt");
+    char line[1000];
+    char file_line[1000];
+    char check[1000];
+    FILE *shortcut = fopen(wd, "r");
+    char lines[1000][1000];
+    int index = 0;
+    int flag = 0;
+    while (fgets(file_line, 1000, shortcut) != NULL)
+    {
+        if (*(file_line + strlen(file_line) - 1) == '\n')
+            *(file_line + strlen(file_line) - 1) = '\0';
+        sscanf(file_line, "%s ", check);
+        if (strcmp(argv[5], check) == 0)
+        {
+            flag = 1;
+            strcpy(line, argv[5]);
+            strcat(line, " ");
+            strcat(line, argv[3]);
+            strcpy(lines[index], line);
+            printf("%s\n", lines[index]);
+        }
+        else
+            strcpy(lines[index], file_line);
+        index++;
+    }
+    fclose(shortcut);
+    if (flag == 0)
+        return 1;
+    FILE *shortcut_new = fopen(wd, "w");
+    for (int i = 0; i < index; i++)
+    {
+        fprintf(shortcut_new, "%s\n", lines[i]);
+    }
+    fclose(shortcut_new);
+    return 0;
+}
+
+int shortcut_remove(int argc, char *argv[])
+{
+    char wd[1000];
+    repoExists(wd);
+    strcpy(wd + strlen(wd), "\\shortcut.txt");
+    char file_line[1000];
+    char check[1000];
+    FILE *shortcut = fopen(wd, "r");
+    char lines[1000][1000];
+    int yes[1000] = {0};
+    int index = 0;
+    int flag = 0;
+    while (fgets(file_line, 1000, shortcut) != NULL)
+    {
+        if (*(file_line + strlen(file_line) - 1) == '\n')
+            *(file_line + strlen(file_line) - 1) = '\0';
+        sscanf(file_line, "%s ", check);
+        if (strcmp(argv[3], check) != 0)
+        {
+            strcpy(lines[index], file_line);
+            yes[index] = 1;
+        }
+        else
+            flag = 1;
+        index++;
+    }
+    if (flag == 0)
+        return 1;
+    fclose(shortcut);
+    FILE *shortcut_new = fopen(wd, "w");
+    for (int i = 0; i < index; i++)
+    {
+        if (yes[i] != 1)
+            continue;
+        fprintf(shortcut_new, "%s\n", lines[i]);
+    }
+    fclose(shortcut_new);
+    return 0;
+}
+
+int shortcut_message(char message[])
+{
+    char wd[1000];
+    repoExists(wd);
+    strcpy(wd + strlen(wd), "\\shortcut.txt");
+    char file_line[1000];
+    char check[1000];
+    FILE *shortcut = fopen(wd, "r");
+    while (fgets(file_line, 1000, shortcut) != NULL)
+    {
+        if (*(file_line + strlen(file_line) - 1) == '\n')
+            *(file_line + strlen(file_line) - 1) = '\0';
+        sscanf(file_line, "%s ", check);
+        if (strcmp(message, check) == 0)
+        {
+            strcpy(message, file_line + strlen(check) + 1);
+            fclose(shortcut);
+            return 0;
+        }
+    }
+    return 1;
 }
 
 char als_list[100][2][100];
@@ -164,10 +281,37 @@ int separator(char arg[], char sep[][1000])
 
 int alias_replace(int argc, char *argv[])
 {
-    // local
+    // global
     int done[100] = {0};
     for (int i = 1; i < argc; i++)
     {
+        for (int j = total_global_als_count - 1; j >= 0; j--)
+        {
+            if (strcmp(argv[i], global_als_list[j][0]) == 0)
+            {
+                int n = count_words(als_list[j][1]);
+                char sep[n][1000];
+                separator(global_als_list[j][1], sep);
+                for (int k = argc - 1; k > i; k--)
+                {
+                    argv[k + n - 1] = (char *)malloc(1000);
+                    strcpy(argv[k + n - 1], argv[k]);
+                }
+                for (int k = i; k < n + i; k++)
+                {
+                    argv[k] = (char *)malloc(1000);
+                    strcpy(argv[k], sep[k - i]);
+                }
+                argc += n - 1;
+                i += n - 1;
+            }
+        }
+    }
+    // local
+    for (int i = 1; i < argc; i++)
+    {
+        if (done[i] == 1)
+            continue;
         for (int j = total_als_count - 1; j >= 0; j--)
         {
             if (strcmp(argv[i], als_list[j][0]) == 0)
@@ -191,34 +335,6 @@ int alias_replace(int argc, char *argv[])
             }
         }
     }
-    // global
-    for (int i = 1; i < argc; i++)
-    {
-        if (done[i] == 1)
-            continue;
-        for (int j = total_global_als_count - 1; j >= 0; j--)
-        {
-            if (strcmp(argv[i], global_als_list[j][0]) == 0)
-            {
-                int n = count_words(als_list[j][1]);
-                char sep[n][1000];
-                separator(global_als_list[j][1], sep);
-                for (int k = argc - 1; k > i; k--)
-                {
-                    argv[k + n - 1] = (char *)malloc(1000);
-                    strcpy(argv[k + n - 1], argv[k]);
-                }
-                for (int k = i; k < n + i; k++)
-                {
-                    argv[k] = (char *)malloc(1000);
-                    strcpy(argv[k], sep[k - i]);
-                }
-                argc += n - 1;
-                i += n - 1;
-            }
-        }
-    }
-
     return argc;
 }
 
@@ -392,7 +508,13 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 2 && strcmp(argv[1], "status") == 0)
         return 1;
-    if (strcmp(argv[1], "commit") == 0 && strcmp(argv[2], "-m") == 0)
+    if (strcmp(argv[1], "commit") == 0 && (strcmp(argv[2], "-m") || strcmp(argv[2], "-s") == 0))
+        return 1;
+    if (strcmp(argv[1], "set") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
+        return 1;
+    if (strcmp(argv[1], "replace") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
+        return 1;
+    if (strcmp(argv[1], "remove") == 0 && strcmp(argv[2], "-s") == 0)
         return 1;
     return 0;
 }
@@ -1230,6 +1352,18 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(argv[1], "commit") == 0)
     {
+        if (strcmp(argv[2], "-s") == 0)
+        {
+            char message[1000];
+            strcpy(message, argv[3]);
+            if (shortcut_message(message) == 1)
+            {
+                printf("\"%s\" doesn't exist!\n", argv[3]);
+                exit(1);
+            }
+            argv[3] = (char *)malloc(1000);
+            strcpy(argv[3], message);
+        }
         if (strlen(argv[3]) > 72)
         {
             printf("Commit message is too long! Try again with a message shorter than 73 characters.\n");
@@ -1240,7 +1374,46 @@ int main(int argc, char *argv[])
             printf("Commit message is empty!\n");
             return 1;
         }
-        commitfunc(argv[3]);
         return 0;
+    }
+    else if (strcmp(argv[1], "set") == 0)
+    {
+        if (argc != 6)
+        {
+            printf("The last arg(shortcut-name) is empty!\n");
+            return 1;
+        }
+        char line[1000];
+        strcpy(line, argv[5]);
+        strcpy(line + strlen(line), " ");
+        strcpy(line + strlen(line), argv[3]);
+        char address[1000];
+        repoExists(address);
+        forward_one(address, "shortcut.txt");
+        if (line_exists(address, line) == 1)
+        {
+            printf("Shortcut already exists! Use the 'replace' command to change it.\n");
+            exit(1);
+        }
+        shortcut_write(argc, argv);
+        return 0;
+    }
+    else if (strcmp(argv[1], "replace") == 0)
+    {
+        if (shortcut_replace(argc, argv) == 1)
+        {
+            printf("\"%s\" doesn't exist!\n", argv[5]);
+            exit(1);
+        }
+        printf("\"%s\" was replaced and now is a shortcut for \"%s\".\n", argv[5], argv[3]);
+    }
+    else if (strcmp(argv[1], "remove") == 0)
+    {
+        if (shortcut_remove(argc, argv) == 1)
+        {
+            printf("\"%s\" doesn't exist!\n", argv[3]);
+            exit(1);
+        }
+        printf("\"%s\" was successfully removed!\n", argv[3]);
     }
 }
