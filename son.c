@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <time.h>
 
+char current_branch[1000];
+int current_branch_ID;
+
 int count_words(char arg[])
 {
     int count = 0;
@@ -144,6 +147,25 @@ int repoExists(char *address)
         }
         flag++;
     }
+}
+
+int new_branch_number()
+{
+    int max = 0, n;
+    char dot_son[1000];
+    repoExists(dot_son);
+    DIR *son = opendir(dot_son);
+    struct dirent *dir;
+    while ((dir = readdir(son)) != NULL)
+    {
+        if (strstr(dir->d_name, "branch") != NULL)
+        {
+            sscanf(dir->d_name, "branch%d", &n);
+            if (n > max)
+                max = n;
+        }
+    }
+    return max + 1;
 }
 
 int alias_write(int argc, char *argv[])
@@ -428,9 +450,9 @@ int back_one(char address[])
     return 1;
 }
 
-int copy_file(char file_name[], char org_address[], char copy_directory[])
+int copy_file(char file_name[], char org_address[], char copy_directory[], char check)
 {
-    if (strcmp(file_name, "commitInfo.txt") == 0)
+    if (strcmp(file_name, "commitInfo.txt") == 0 && check != 'y')
         return 1;
     char copy_address[1000];
     strcpy(copy_address, copy_directory);
@@ -469,7 +491,7 @@ int copy_folder(char folder_name[], char org_address[], char copy_directory[])
         if (type == 'F')
             copy_folder(dir->d_name, org_f_address, copy_address);
         else if (type == 'f')
-            copy_file(dir->d_name, org_f_address, copy_address);
+            copy_file(dir->d_name, org_f_address, copy_address, 'a');
     }
     return 0;
 }
@@ -486,12 +508,12 @@ int userSettings(int argc, char *argv[])
             {
                 if (*(n + strlen(n) - 1) == '\n')
                     *(n + strlen(n) - 1) = '\0';
-                printf("(%s)", n);
                 forward_one(n, ".son\\name.txt");
                 FILE *name = fopen(n, "w");
                 fprintf(name, "%s", argv[4]);
                 fclose(name);
             }
+            printf("Global username is now set to \"%s\"\n", argv[4]);
         }
         if (strcmp(argv[3], "user.email") == 0)
         {
@@ -506,28 +528,28 @@ int userSettings(int argc, char *argv[])
                 fprintf(email, "%s", argv[4]);
                 fclose(email);
             }
+            printf("Global email is now set to \"%s\"\n", argv[4]);
         }
     }
     else
     {
         char *temp = (char *)malloc(1000);
         repoExists(temp);
-        printf("%s\n", temp);
         if (strcmp(argv[2], "user.name") == 0)
         {
             strcpy(temp + strlen(temp), "\\name.txt");
-            printf("%s", temp);
             FILE *name = fopen(temp, "w");
             fprintf(name, "%s", argv[3]);
             fclose(name);
+            printf("Local username is now set to \"%s\"\n", argv[3]);
         }
         if (strcmp(argv[2], "user.email") == 0)
         {
             strcpy(temp + strlen(temp), "\\email.txt");
-            printf("%s", temp);
             FILE *email = fopen(temp, "w");
             fprintf(email, "%s", argv[3]);
             fclose(email);
+            printf("Local email is now set to \"%s\"\n", argv[3]);
         }
     }
 }
@@ -577,6 +599,10 @@ int validInput(int argc, char *argv[])
     if (argc == 7 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-before") == 0)
         return 1;
     if (argc == 4 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-search") == 0)
+        return 1;
+    if (argc == 3 && strcmp(argv[1], "branch") == 0)
+        return 1;
+    if (argc == 2 && strcmp(argv[1], "branch") == 0)
         return 1;
     return 0;
 }
@@ -679,7 +705,7 @@ int commit_n_folder(int n)
     strcpy(wd, commitfolder_address);
     forward_one(commitfolder_address, "commit");
     char *m = (char *)malloc(100);
-    sprintf(m, "%d", n);
+    sprintf(m, "%d.%d", n, current_branch_ID);
     strcpy(commitfolder_address + strlen(commitfolder_address), m);
     mkdir(commitfolder_address);
     *(wd + strlen(wd) - 5) = '\0';
@@ -696,13 +722,13 @@ int commit_n_folder(int n)
         if (type == 'F')
             copy_folder(dir->d_name, org_f_address, commitfolder_address);
         else if (type == 'f')
-            copy_file(dir->d_name, org_f_address, commitfolder_address);
+            copy_file(dir->d_name, org_f_address, commitfolder_address, 'a');
     }
     repoExists(wd);
     char name[1000];
-    sprintf(name, "commit%d", n);
+    sprintf(name, "commit%d.%d", n, current_branch_ID);
     char name2[1000];
-    sprintf(name2, "commit%d", n - 1);
+    sprintf(name2, "commit%d.%d", n - 1, current_branch_ID);
     char org_f_address[1000];
     strcpy(org_f_address, wd);
     forward_one(org_f_address, name2);
@@ -716,18 +742,18 @@ int cur_commit(char address[])
     repoExists(repo);
     DIR *cur_dir = opendir(repo);
     struct dirent *dir;
-    int max = 0, n;
+    int max = 0, n, br;
     while ((dir = readdir(cur_dir)) != NULL)
     {
         if (strstr(dir->d_name, "commit") != NULL)
         {
-            sscanf(dir->d_name, "commit%d", &n);
-            if (n > max)
+            sscanf(dir->d_name, "commit%d.%d", &n, &br);
+            if (n > max && br == current_branch_ID)
                 max = n;
         }
     }
     char temp[100];
-    sprintf(temp, "commit%d", max);
+    sprintf(temp, "commit%d.%d", max, current_branch_ID);
     forward_one(repo, temp);
     strcpy(address, repo);
     return max;
@@ -739,18 +765,18 @@ int last_commit(char address[])
     repoExists(repo);
     DIR *cur_dir = opendir(repo);
     struct dirent *dir;
-    int max = 0, n;
+    int max = 0, n, br;
     while ((dir = readdir(cur_dir)) != NULL)
     {
         if (strstr(dir->d_name, "commit") != NULL)
         {
-            sscanf(dir->d_name, "commit%d", &n);
-            if (n > max)
+            sscanf(dir->d_name, "commit%d.%d", &n, &br);
+            if (n > max && br == current_branch_ID)
                 max = n;
         }
     }
     char temp[100];
-    sprintf(temp, "commit%d", max - 1);
+    sprintf(temp, "commit%d.%d", max - 1, current_branch_ID);
     forward_one(repo, temp);
     strcpy(address, repo);
     return max - 1;
@@ -761,6 +787,20 @@ int makeRepo()
     char cwd[1000];
     getcwd(cwd, 1000);
     mkdir(".son");
+    char master_branch[1000];
+    getcwd(master_branch, 1000);
+    forward_one(master_branch, ".son");
+    forward_one(master_branch, "branch0.txt");
+    FILE *master = fopen(master_branch, "w");
+    fprintf(master, "master\ncommit0.0\n");
+    fclose(master);
+    char branch[1000];
+    getcwd(branch, 1000);
+    forward_one(branch, ".son");
+    forward_one(branch, "curr_branch.txt");
+    FILE *curr_branch = fopen(branch, "w");
+    fprintf(curr_branch, "branch0.txt");
+    fclose(curr_branch);
     FILE *repo_address = fopen(".\\.son\\repo_address.txt", "w");
     fprintf(repo_address, "%s", cwd);
     fclose(repo_address);
@@ -770,10 +810,10 @@ int makeRepo()
     FILE *repos = fopen("c:\\son\\repos.txt", "a");
     fprintf(repos, "%s\n", cwd);
     fclose(repos);
-    mkdir(".\\.son\\commit0");
+    mkdir(".\\.son\\commit0.0");
     char commit0_address[1000];
     getcwd(commit0_address, 1000);
-    strcpy(commit0_address + strlen(commit0_address), "\\.son\\commit0");
+    strcpy(commit0_address + strlen(commit0_address), "\\.son\\commit0.0");
     DIR *currentDir = opendir(".");
     struct dirent *dir;
     while ((dir = readdir(currentDir)) != NULL)
@@ -787,7 +827,7 @@ int makeRepo()
         if (type == 'F')
             copy_folder(dir->d_name, org_f_address, commit0_address);
         else if (type == 'f')
-            copy_file(dir->d_name, org_f_address, commit0_address);
+            copy_file(dir->d_name, org_f_address, commit0_address, 'a');
     }
     commit_n_folder(1);
     printf("A new repo was succsessfully made.\n");
@@ -1052,9 +1092,16 @@ int commitfunc(char *argv3)
         printf("Commit message --> %s\n\n", argv3);
         printf("Username --> %s\n\n", name);
         printf("Time --> %s\n\n", time_str);
-        printf("Commit ID --> %d\n\n", count);
+        printf("Commited files/folders count --> %d\n\n", count);
         printf("'''''''''''''''''''''''''''''''''''");
         fclose(info);
+        back_one(dot_son);
+        forward_one(dot_son, current_branch);
+        FILE *c_br = fopen(dot_son, "a");
+        fprintf(c_br, "commit%d.%d\n", n, current_branch_ID);
+        fclose(c_br);
+        back_one(dot_son);
+        forward_one(dot_son, "added.txt");
         commit_n_folder(n + 1);
         FILE *addednew = fopen(dot_son, "w");
         fclose(addednew);
@@ -1075,7 +1122,7 @@ int commitfunc(char *argv3)
 int log_n(int n)
 {
     char name[1000];
-    sprintf(name, "commit%d", n);
+    sprintf(name, "commit%d.%d", n, current_branch_ID);
     char info_address[1000];
     repoExists(info_address);
     forward_one(info_address, name);
@@ -1112,7 +1159,7 @@ int log_n(int n)
 int log_n_with_author(int n, char author[])
 {
     char name[1000];
-    sprintf(name, "commit%d", n);
+    sprintf(name, "commit%d.%d", n, current_branch_ID);
     char info_address[1000];
     repoExists(info_address);
     forward_one(info_address, name);
@@ -1188,7 +1235,7 @@ int compare_time(char time[][1000], char given_time[][1000])
 int log_n_with_time(int n, char which[], char given_time[])
 {
     char name[1000];
-    sprintf(name, "commit%d", n);
+    sprintf(name, "commit%d.%d", n, current_branch_ID);
     char info_address[1000];
     repoExists(info_address);
     forward_one(info_address, name);
@@ -1244,7 +1291,7 @@ int log_n_with_time(int n, char which[], char given_time[])
 int log_n_with_search(int n, char word[])
 {
     char name[1000];
-    sprintf(name, "commit%d", n);
+    sprintf(name, "commit%d.%d", n, current_branch_ID);
     char info_address[1000];
     repoExists(info_address);
     forward_one(info_address, name);
@@ -1281,6 +1328,35 @@ int log_n_with_search(int n, char word[])
     return 0;
 }
 
+int make_branch(char name[])
+{
+    char org_commit[1000];
+    int n = last_commit(org_commit);
+    char cop_folder[1000];
+    strcpy(cop_folder, org_commit);
+    back_one(cop_folder);
+    int m = new_branch_number();
+    char commit_name[1000];
+    sprintf(commit_name, "commit%d.%d", n, m);
+    copy_folder(commit_name, org_commit, cop_folder);
+    char branch_file[1000];
+    sprintf(branch_file, "branch%d.txt", m);
+    forward_one(cop_folder, branch_file);
+    char copy_info[1000];
+    strcpy(copy_info, org_commit);
+    char info_folder[1000];
+    strcpy(info_folder, cop_folder);
+    back_one(info_folder);
+    forward_one(info_folder, commit_name);
+    forward_one(copy_info, "commitInfo.txt");
+    copy_file("commitInfo.txt", copy_info, info_folder, 'y');
+    FILE *br = fopen(cop_folder, "w");
+    fprintf(br, "%s\ncommit%d.%d\n", name, n, m);
+    fclose(br);
+    printf("A new branch with the name \"%s\" was created\n", name);
+    return 0;
+}
+
 int main(int argc, char *argv[])
 {
     // repo address
@@ -1311,9 +1387,14 @@ int main(int argc, char *argv[])
             printf("Repo already exists!\n");
         return 0;
     }
-    // find_current_commit
-    char *cur_commit_address = (char *)malloc(1000);
-    cur_commit(cur_commit_address);
+    // cur_branch
+    char dot_son[1000];
+    repoExists(dot_son);
+    forward_one(dot_son, "curr_branch.txt");
+    FILE *c_br = fopen(dot_son, "r");
+    fgets(current_branch, 1000, c_br);
+    sscanf(current_branch, "branch%d", &current_branch_ID);
+    fclose(c_br);
     // user.name / user.email
     if (strcmp(argv[1], "config") == 0 && (strstr(argv[2], "user.") != NULL || strstr(argv[3], "user.") != NULL))
     {
@@ -1431,7 +1512,7 @@ int main(int argc, char *argv[])
                         }
                         else if (type == 'f')
                         {
-                            copy_file(dir->d_name, org_f_address, cur_commit_address);
+                            copy_file(dir->d_name, org_f_address, cur_commit_address, 'a');
                             if (line_exists(temp, temp_line) == 0)
                                 fprintf(added, "%s\n", org_f_address);
                         }
@@ -1476,7 +1557,7 @@ int main(int argc, char *argv[])
                     last_maker(file_name);
                     back_one(address);
                     if (type == 'f')
-                        copy_file(file_name, org, address);
+                        copy_file(file_name, org, address, 'a');
                     else if (type == 'F')
                         copy_folder(file_name, org, address);
                 }
@@ -1511,7 +1592,7 @@ int main(int argc, char *argv[])
                     }
                     else if (type == 'f')
                     {
-                        copy_file(dir->d_name, org_f_address, cur_commit_address);
+                        copy_file(dir->d_name, org_f_address, cur_commit_address, 'a');
                         if (line_exists(temp, temp_line) == 0)
                             fprintf(added, "%s\n", org_f_address);
                     }
@@ -1554,7 +1635,6 @@ int main(int argc, char *argv[])
             strcpy(org_to_commit, org_f_address);
             repo_to_commit(org_to_commit, 'c');
             int check = file_changed(org_f_address, org_to_commit);
-            // printf("(%s - %d)\n", org_f_address, check);
             if (check == 1)
             {
                 printf("    %s --> -M\n", dir->d_name);
@@ -1737,5 +1817,37 @@ int main(int argc, char *argv[])
         else
             for (int i = n - 1; i > 0; i--)
                 log_n(i);
+    }
+    else if (strcmp(argv[1], "branch") == 0)
+    {
+        if (argc == 3)
+        {
+            make_branch(argv[2]);
+            return 0;
+        }
+        else
+        {
+            printf("\nbranch list:\n\n");
+            char dot_son[1000];
+            repoExists(dot_son);
+            DIR *son = opendir(dot_son);
+            struct dirent *dir;
+            while ((dir = readdir(son)) != NULL)
+            {
+                if (strstr(dir->d_name, "branch") != NULL && dir->d_name[0] == 'b')
+                {
+                    char address[1000];
+                    strcpy(address, dot_son);
+                    forward_one(address, dir->d_name);
+                    FILE *br = fopen(address, "r");
+                    char br_name[1000];
+                    fgets(br_name, 1000, br);
+                    if (*(br_name + strlen(br_name) - 1) == '\n')
+                        *(br_name + strlen(br_name) - 1) = '\0';
+                    printf("    --> %s\n", br_name);
+                }
+            }
+            return 0;
+        }
     }
 }
