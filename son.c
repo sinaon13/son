@@ -4,6 +4,114 @@
 #include <stdlib.h>
 #include <time.h>
 
+int count_words(char arg[])
+{
+    int count = 0;
+    if (*arg != ' ')
+        count++;
+    for (int i = 0; i < strlen(arg) - 1; i++)
+    {
+        if (*(arg + i) == ' ' && *(arg + i + 1) != ' ')
+            count++;
+    }
+    return count;
+}
+
+int separator(char arg[], char sep[][1000])
+{
+    int count = 0;
+    if (*arg != ' ')
+    {
+        for (int j = 1; j < strlen(arg); j++)
+        {
+            if (*(arg + j) == ' ' && *(arg + j - 1) != ' ')
+            {
+                memcpy(sep[count], arg, j);
+                *(sep[count] + j) = '\0';
+                count++;
+                break;
+            }
+            if (j == strlen(arg) - 1)
+            {
+                memcpy(sep[count], arg, j + 1);
+                *(sep[count] + j + 1) = '\0';
+                count++;
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < strlen(arg) - 1; i++)
+    {
+        if (*(arg + i) == ' ' && *(arg + i + 1) != ' ')
+        {
+            for (int j = i + 1; j < strlen(arg); j++)
+            {
+                if (*(arg + j) == ' ' && *(arg + j - 1) != ' ')
+                {
+                    memcpy(sep[count], arg + i + 1, j - i - 1);
+                    *(sep[count] + j - i - 1) = '\0';
+                    count++;
+                    break;
+                }
+                if (j == strlen(arg) - 1)
+                {
+                    memcpy(sep[count], arg + i + 1, j - i);
+                    *(sep[count] + j - i) = '\0';
+                    count++;
+                }
+            }
+        }
+    }
+}
+int word_exists(char word[], char str[])
+{
+    int n = count_words(str);
+    char sep_str[n][1000];
+    separator(str, sep_str);
+    for (int i = 0; i < n; i++)
+    {
+        if (strcmp(word, sep_str[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
+int str_to_int(char str[])
+{
+    int pow = 1;
+    int number = 0;
+    for (int i = strlen(str) - 1; i >= 0; i--)
+    {
+        number += (*(str + i) - '0') * pow;
+        pow *= 10;
+    }
+    return number;
+}
+
+int line_counter(char address[])
+{
+    FILE *file = fopen(address, "r");
+    char line[1000];
+    int count = 0;
+    int flag;
+    while (fgets(line, 1000, file) != NULL)
+    {
+        flag = 0;
+        for (int i = 0; i < strlen(line); i++)
+        {
+            if (*(line + i) != ' ' && *(line + i) != '\n')
+            {
+                flag = 1;
+                break;
+            }
+        }
+
+        if (flag)
+            count++;
+    }
+    return count;
+}
+
 int repoExists(char *address)
 {
     getcwd(address, 1000);
@@ -219,66 +327,6 @@ int alias_read(int argc, char *argv[])
     return 0;
 }
 
-int count_words(char arg[])
-{
-    int count = 0;
-    if (*arg != ' ')
-        count++;
-    for (int i = 0; i < strlen(arg) - 1; i++)
-    {
-        if (*(arg + i) == ' ' && *(arg + i + 1) != ' ')
-            count++;
-    }
-    return count;
-}
-
-int separator(char arg[], char sep[][1000])
-{
-    int count = 0;
-    if (*arg != ' ')
-    {
-        for (int j = 1; j < strlen(arg); j++)
-        {
-            if (*(arg + j) == ' ' && *(arg + j - 1) != ' ')
-            {
-                memcpy(sep[count], arg, j);
-                *(sep[count] + j) = '\0';
-                count++;
-                break;
-            }
-            if (j == strlen(arg) - 1)
-            {
-                memcpy(sep[count], arg, j + 1);
-                *(sep[count] + j + 1) = '\0';
-                count++;
-                break;
-            }
-        }
-    }
-    for (int i = 0; i < strlen(arg) - 1; i++)
-    {
-        if (*(arg + i) == ' ' && *(arg + i + 1) != ' ')
-        {
-            for (int j = i + 1; j < strlen(arg); j++)
-            {
-                if (*(arg + j) == ' ' && *(arg + j - 1) != ' ')
-                {
-                    memcpy(sep[count], arg + i + 1, j - i - 1);
-                    *(sep[count] + j - i - 1) = '\0';
-                    count++;
-                    break;
-                }
-                if (j == strlen(arg) - 1)
-                {
-                    memcpy(sep[count], arg + i + 1, j - i);
-                    *(sep[count] + j - i) = '\0';
-                    count++;
-                }
-            }
-        }
-    }
-}
-
 int alias_replace(int argc, char *argv[])
 {
     // global
@@ -382,6 +430,8 @@ int back_one(char address[])
 
 int copy_file(char file_name[], char org_address[], char copy_directory[])
 {
+    if (strcmp(file_name, "commitInfo.txt") == 0)
+        return 1;
     char copy_address[1000];
     strcpy(copy_address, copy_directory);
     forward_one(copy_address, file_name);
@@ -508,13 +558,25 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 2 && strcmp(argv[1], "status") == 0)
         return 1;
-    if (strcmp(argv[1], "commit") == 0 && (strcmp(argv[2], "-m") || strcmp(argv[2], "-s") == 0))
+    if (strcmp(argv[1], "commit") == 0 && (strcmp(argv[2], "-m") == 0 || strcmp(argv[2], "-s") == 0))
         return 1;
     if (strcmp(argv[1], "set") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
         return 1;
     if (strcmp(argv[1], "replace") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
         return 1;
     if (strcmp(argv[1], "remove") == 0 && strcmp(argv[2], "-s") == 0)
+        return 1;
+    if (argc == 2 && strcmp(argv[1], "log") == 0)
+        return 1;
+    if (argc == 4 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-n") == 0)
+        return 1;
+    if (argc == 4 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-author") == 0)
+        return 1;
+    if (argc == 7 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-since") == 0)
+        return 1;
+    if (argc == 7 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-before") == 0)
+        return 1;
+    if (argc == 4 && strcmp(argv[1], "log") == 0 && strcmp(argv[2], "-search") == 0)
         return 1;
     return 0;
 }
@@ -636,6 +698,15 @@ int commit_n_folder(int n)
         else if (type == 'f')
             copy_file(dir->d_name, org_f_address, commitfolder_address);
     }
+    repoExists(wd);
+    char name[1000];
+    sprintf(name, "commit%d", n);
+    char name2[1000];
+    sprintf(name2, "commit%d", n - 1);
+    char org_f_address[1000];
+    strcpy(org_f_address, wd);
+    forward_one(org_f_address, name2);
+    copy_folder(name, org_f_address, wd);
     return 0;
 }
 
@@ -958,6 +1029,7 @@ int commitfunc(char *argv3)
     char b = a[0];
     fgets(a, 1000, added);
     fclose(added);
+    int count = line_counter(dot_son);
     if (a[0] != b)
     {
         int commitID = cur_commitID();
@@ -965,6 +1037,7 @@ int commitfunc(char *argv3)
         time_t mytime = time(NULL);
         char *time_str = ctime(&mytime);
         time_str[strlen(time_str) - 1] = '\0';
+        strcpy(time_str, time_str + 4);
         char name[1000];
         if (username_read(name) == 1)
             exit(1);
@@ -972,13 +1045,14 @@ int commitfunc(char *argv3)
         int n = cur_commit(commit_info_file);
         forward_one(commit_info_file, "commitInfo.txt");
         FILE *info = fopen(commit_info_file, "w");
-        fprintf(info, "%d\n%s\n%s\n%s", commitID, argv3, name, time_str);
+        fprintf(info, "%d\n%s\n%s\n%s\n%d", commitID, argv3, name, time_str, count);
         printf("'''''''''''''''''''''''''''''''''''\n");
         printf("Succsessful!\n\n");
         printf("Commit ID --> %d\n\n", commitID);
         printf("Commit message --> %s\n\n", argv3);
         printf("Username --> %s\n\n", name);
         printf("Time --> %s\n\n", time_str);
+        printf("Commit ID --> %d\n\n", count);
         printf("'''''''''''''''''''''''''''''''''''");
         fclose(info);
         commit_n_folder(n + 1);
@@ -996,6 +1070,215 @@ int commitfunc(char *argv3)
         printf("No changes have been made since the last commit.\n");
         exit(1);
     }
+}
+
+int log_n(int n)
+{
+    char name[1000];
+    sprintf(name, "commit%d", n);
+    char info_address[1000];
+    repoExists(info_address);
+    forward_one(info_address, name);
+    forward_one(info_address, "commitInfo.txt");
+    FILE *info = fopen(info_address, "r");
+    int ID, count;
+    char message[1000], username[1000], time[1000], line[1000];
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &ID);
+    fgets(line, 1000, info);
+    strcpy(message, line);
+    if (*(message + strlen(message) - 1) == '\n')
+        *(message + strlen(message) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(username, line);
+    if (*(username + strlen(username) - 1) == '\n')
+        *(username + strlen(username) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(time, line);
+    if (*(time + strlen(time) - 1) == '\n')
+        *(time + strlen(time) - 1) = '\0';
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &count);
+    printf("'''''''''''''''''''''''''''''''''''\n");
+    printf("Succsessful!\n\n");
+    printf("Commit ID --> %d\n\n", ID);
+    printf("Commit message --> %s\n\n", message);
+    printf("Username --> %s\n\n", username);
+    printf("Time --> %s\n\n", time);
+    printf("Commited files/folders count --> %d\n\n", count);
+    printf("'''''''''''''''''''''''''''''''''''");
+}
+
+int log_n_with_author(int n, char author[])
+{
+    char name[1000];
+    sprintf(name, "commit%d", n);
+    char info_address[1000];
+    repoExists(info_address);
+    forward_one(info_address, name);
+    forward_one(info_address, "commitInfo.txt");
+    FILE *info = fopen(info_address, "r");
+    int ID, count;
+    char message[1000], username[1000], time[1000], line[1000];
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &ID);
+    fgets(line, 1000, info);
+    strcpy(message, line);
+    if (*(message + strlen(message) - 1) == '\n')
+        *(message + strlen(message) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(username, line);
+    if (*(username + strlen(username) - 1) == '\n')
+        *(username + strlen(username) - 1) = '\0';
+    if (strcmp(username, author) != 0)
+        return 1;
+    fgets(line, 1000, info);
+    strcpy(time, line);
+    if (*(time + strlen(time) - 1) == '\n')
+        *(time + strlen(time) - 1) = '\0';
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &count);
+    printf("'''''''''''''''''''''''''''''''''''\n");
+    printf("Succsessful!\n\n");
+    printf("Commit ID --> %d\n\n", ID);
+    printf("Commit message --> %s\n\n", message);
+    printf("Username --> %s\n\n", username);
+    printf("Time --> %s\n\n", time);
+    printf("Commited files/folders count --> %d\n\n", count);
+    printf("'''''''''''''''''''''''''''''''''''");
+    return 0;
+}
+
+int compare_time(char time[][1000], char given_time[][1000])
+{
+    // year
+    if (str_to_int(time[3]) > str_to_int(given_time[3]))
+        return 1;
+    else if (str_to_int(time[3]) < str_to_int(given_time[3]))
+        return 0;
+    // month
+    // day
+    if (str_to_int(time[1]) > str_to_int(given_time[1]))
+        return 1;
+    else if (str_to_int(time[1]) < str_to_int(given_time[1]))
+        return 0;
+    // HH:MM:SS
+    int hour, minute, second;
+    sscanf(time[2], "%d:%d:%d", &hour, &minute, &second);
+    int given_hour, given_minute, given_second;
+    sscanf(given_time[2], "%d:%d:%d", &given_hour, &given_minute, &given_second);
+    // hour
+    if (hour > given_hour)
+        return 1;
+    else if (hour < given_hour)
+        return 0;
+    // minute
+    if (minute > given_minute)
+        return 1;
+    else if (minute < given_minute)
+        return 0;
+    // second
+    if (second > given_second)
+        return 1;
+    else if (second < given_second)
+        return 0;
+    return 2;
+}
+
+int log_n_with_time(int n, char which[], char given_time[])
+{
+    char name[1000];
+    sprintf(name, "commit%d", n);
+    char info_address[1000];
+    repoExists(info_address);
+    forward_one(info_address, name);
+    forward_one(info_address, "commitInfo.txt");
+    FILE *info = fopen(info_address, "r");
+    int ID, count;
+    char message[1000], username[1000], time[1000], line[1000];
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &ID);
+    fgets(line, 1000, info);
+    strcpy(message, line);
+    if (*(message + strlen(message) - 1) == '\n')
+        *(message + strlen(message) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(username, line);
+    if (*(username + strlen(username) - 1) == '\n')
+        *(username + strlen(username) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(time, line);
+    if (*(time + strlen(time) - 1) == '\n')
+        *(time + strlen(time) - 1) = '\0';
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &count);
+    if (strcmp(which, "-since") == 0)
+    {
+        char septime[4][1000];
+        char sepgiventime[4][1000];
+        separator(time, septime);
+        separator(given_time, sepgiventime);
+        if (compare_time(septime, sepgiventime) != 1)
+            return 1;
+    }
+    if (strcmp(which, "-before") == 0)
+    {
+        char septime[4][1000];
+        char sepgiventime[4][1000];
+        separator(time, septime);
+        separator(given_time, sepgiventime);
+        if (compare_time(septime, sepgiventime) != 0)
+            return 1;
+    }
+    printf("'''''''''''''''''''''''''''''''''''\n");
+    printf("Succsessful!\n\n");
+    printf("Commit ID --> %d\n\n", ID);
+    printf("Commit message --> %s\n\n", message);
+    printf("Username --> %s\n\n", username);
+    printf("Time --> %s\n\n", time);
+    printf("Commited files/folders count --> %d\n\n", count);
+    printf("'''''''''''''''''''''''''''''''''''");
+    return 0;
+}
+
+int log_n_with_search(int n, char word[])
+{
+    char name[1000];
+    sprintf(name, "commit%d", n);
+    char info_address[1000];
+    repoExists(info_address);
+    forward_one(info_address, name);
+    forward_one(info_address, "commitInfo.txt");
+    FILE *info = fopen(info_address, "r");
+    int ID, count;
+    char message[1000], username[1000], time[1000], line[1000];
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &ID);
+    fgets(line, 1000, info);
+    strcpy(message, line);
+    if (*(message + strlen(message) - 1) == '\n')
+        *(message + strlen(message) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(username, line);
+    if (*(username + strlen(username) - 1) == '\n')
+        *(username + strlen(username) - 1) = '\0';
+    fgets(line, 1000, info);
+    strcpy(time, line);
+    if (*(time + strlen(time) - 1) == '\n')
+        *(time + strlen(time) - 1) = '\0';
+    fgets(line, 1000, info);
+    sscanf(line, "%d", &count);
+    if (word_exists(word, message) == 0)
+        return 1;
+    printf("'''''''''''''''''''''''''''''''''''\n");
+    printf("Succsessful!\n\n");
+    printf("Commit ID --> %d\n\n", ID);
+    printf("Commit message --> %s\n\n", message);
+    printf("Username --> %s\n\n", username);
+    printf("Time --> %s\n\n", time);
+    printf("Commited files/folders count --> %d\n\n", count);
+    printf("'''''''''''''''''''''''''''''''''''");
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -1261,7 +1544,7 @@ int main(int argc, char *argv[])
         char org_to_commit[1000];
         while ((dir = readdir(currDir)) != NULL)
         {
-            if (dir->d_type != 0)
+            if (dir->d_type != 0 || strcmp(dir->d_name, "commitInfo.txt") == 0)
                 continue;
             strcpy(org_f_address, cwd);
             forward_one(org_f_address, dir->d_name);
@@ -1317,7 +1600,7 @@ int main(int argc, char *argv[])
         struct dirent *commit_dir;
         while ((commit_dir = readdir(commit)) != NULL)
         {
-            if (commit_dir->d_type != 0)
+            if (commit_dir->d_type != 0 || strcmp(dir->d_name, "commitInfo.txt") == 0)
                 continue;
             char comtorepo[1000];
             strcpy(comtorepo, last_commit_dir);
@@ -1337,7 +1620,7 @@ int main(int argc, char *argv[])
         struct dirent *commit_dirp;
         while ((commit_dirp = readdir(commitp)) != NULL)
         {
-            if (commit_dirp->d_type != 0)
+            if (commit_dirp->d_type != 0 || strcmp(dir->d_name, "commitInfo.txt") == 0)
                 continue;
             char comtorepo[1000];
             strcpy(comtorepo, last_commit_dir);
@@ -1374,6 +1657,7 @@ int main(int argc, char *argv[])
             printf("Commit message is empty!\n");
             return 1;
         }
+        commitfunc(argv[3]);
         return 0;
     }
     else if (strcmp(argv[1], "set") == 0)
@@ -1415,5 +1699,43 @@ int main(int argc, char *argv[])
             exit(1);
         }
         printf("\"%s\" was successfully removed!\n", argv[3]);
+    }
+    else if (strcmp(argv[1], "log") == 0)
+    {
+        char junk[1000];
+        int n = cur_commit(junk);
+        if (argc > 2 && strcmp(argv[2], "-n") == 0)
+        {
+            int depth;
+            sscanf(argv[3], "%d", &depth);
+            for (int i = n - 1; i > n - depth - 1; i--)
+                log_n(i);
+        }
+        else if (argc > 3 && strcmp(argv[2], "-author") == 0)
+        {
+            for (int i = n - 1; i > 0; i--)
+                log_n_with_author(i, argv[3]);
+        }
+        else if (argc > 6 && (strcmp(argv[2], "-since") == 0 || strcmp(argv[2], "-before") == 0))
+        {
+            char given_time[1000];
+            strcpy(given_time, argv[3]);
+            strcat(given_time, " ");
+            strcat(given_time, argv[4]);
+            strcat(given_time, " ");
+            strcat(given_time, argv[5]);
+            strcat(given_time, " ");
+            strcat(given_time, argv[6]);
+            for (int i = n - 1; i > 0; i--)
+                log_n_with_time(i, argv[2], given_time);
+        }
+        else if (argc > 3 && strcmp(argv[2], "-search") == 0)
+        {
+            for (int i = n - 1; i > 0; i--)
+                log_n_with_search(i, argv[3]);
+        }
+        else
+            for (int i = n - 1; i > 0; i--)
+                log_n(i);
     }
 }
