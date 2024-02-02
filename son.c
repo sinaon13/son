@@ -1079,9 +1079,9 @@ int added_n(char address[], int depth, int max_depth)
             strcpy(temp_2, temp);
             last_maker(temp_2);
             printf("\n");
-            for (int i = 0; i < depth; i++)
-                printf("    ");
-            printf("%d %s %s", depth, temp_2, state);
+            for (int i = 0; i < depth - 1; i++)
+                printf("      ");
+            printf("|____ %d %s %s", depth, temp_2, state);
         }
         if (type == 'F')
         {
@@ -1115,7 +1115,7 @@ int commit_to_repo(char address[])
     char *t = c;
     while (*t != '\\')
     {
-        if (t - address > strlen(address))
+        if (t - address >= strlen(address))
         {
             c = strstr(address, ".son");
             *(c - 1) = '\0';
@@ -1124,8 +1124,11 @@ int commit_to_repo(char address[])
         t++;
     }
     char temp[1000];
-    strcpy(temp, t + 1);
-    strcpy(c - 5, temp);
+    if (*(t + 1) == '\0')
+    {
+        strcpy(temp, t + 1);
+        strcpy(c - 5, temp);
+    }
     return 0;
 }
 
@@ -1542,7 +1545,7 @@ int address_converter(char address[])
     {
         forward_one(new_address, sep[i]);
     }
-    if (*new_address != 'c' && *new_address != 'd' && *new_address != 'C' && *new_address != 'D')
+    if (strstr(new_address, "c:\\") == NULL && strstr(new_address, "D:\\") == NULL && strstr(new_address, "C:\\") == NULL || strstr(new_address, "D:\\") != NULL)
     {
         strcpy(new_address, cwd);
         for (int i = 0; i < count; i++)
@@ -1644,7 +1647,7 @@ int main(int argc, char *argv[])
                         strcpy(state, "--> staged");
                     else
                         strcpy(state, "--> Not staged");
-                    printf("\n    1 %s %s", name, state);
+                    printf("\n|____ 1 %s %s", name, state);
                     int max_depth;
                     sscanf(argv[3], "%d", &max_depth);
                     added_n(org_f_address, 2, max_depth);
@@ -1660,7 +1663,7 @@ int main(int argc, char *argv[])
                         strcpy(state, "--> staged");
                     else
                         strcpy(state, "--> Not staged");
-                    printf("\n    1 %s %s", name, state);
+                    printf("\n|____ 1 %s %s", name, state);
                 }
             }
             return 0;
@@ -1783,8 +1786,10 @@ int main(int argc, char *argv[])
     {
         char cwd[1000];
         getcwd(cwd, 1000);
+        char dot_son[1000];
+        repoExists(dot_son);
         char added_address[1000];
-        strcpy(added_address, repo_address);
+        strcpy(added_address, dot_son);
         forward_one(added_address, "added.txt");
         DIR *currDir = opendir(cwd);
         struct dirent *dir;
@@ -1801,60 +1806,59 @@ int main(int argc, char *argv[])
             strcpy(org_f_address, cwd);
             forward_one(org_f_address, dir->d_name);
             added = line_exists(added_address, org_f_address);
-            if (added == 0)
-                continue;
-            strcpy(org_to_commit, org_f_address);
-            repo_to_commit(org_to_commit, 'c');
-            int check = file_changed(org_f_address, org_to_commit);
-            if (check == 1)
-            {
-                printf("    %s --> -M\n", dir->d_name);
-                continue;
-            }
-            if (check == 3)
-            {
-                printf("    %s --> -A\n", dir->d_name);
-                continue;
-            }
-            if (check == 0)
+            if (added == 1)
             {
                 strcpy(org_to_commit, org_f_address);
-                repo_to_commit(org_to_commit, 'l');
-                check = file_changed(org_f_address, org_to_commit);
+                repo_to_commit(org_to_commit, 'c');
+                int check = file_changed(org_f_address, org_to_commit);
+                if (check == 1)
+                {
+                    printf("    %s --> -M\n", dir->d_name);
+                    continue;
+                }
+                if (check == 3)
+                {
+                    printf("    %s --> -A\n", dir->d_name);
+                    continue;
+                }
                 if (check == 0)
                 {
-                    printf("    %s --> +0\n", dir->d_name);
-                    continue;
-                }
-                else if (check == 1)
-                {
-                    printf("    %s --> +M\n", dir->d_name);
-                    continue;
-                }
-                char last_commit_dir[1000];
-                strcpy(last_commit_dir, org_to_commit);
-                back_one(last_commit_dir);
-                added = alreadyExists(dir->d_name, last_commit_dir);
-                if (added == 0)
-                {
-                    printf("    %s --> +A\n", dir->d_name);
-                    continue;
+                    strcpy(org_to_commit, org_f_address);
+                    repo_to_commit(org_to_commit, 'l');
+                    char last_commit_dir[1000];
+                    strcpy(last_commit_dir, org_to_commit);
+                    back_one(last_commit_dir);
+                    added = alreadyExists(dir->d_name, last_commit_dir);
+                    if (added == 0)
+                    {
+                        printf("    %s --> +A\n", dir->d_name);
+                        continue;
+                    }
+                    check = file_changed(org_f_address, org_to_commit);
+                    if (check == 0)
+                    {
+                        printf("    %s --> +0\n", dir->d_name);
+                        continue;
+                    }
+                    else if (check == 1)
+                    {
+                        printf("    %s --> +M\n", dir->d_name);
+                        continue;
+                    }
                 }
             }
         }
-        strcpy(org_to_commit, org_f_address);
-        repo_to_commit(org_to_commit, 'c');
-        char last_commit_dir[1000];
-        strcpy(last_commit_dir, org_to_commit);
-        back_one(last_commit_dir);
-        DIR *commit = opendir(last_commit_dir);
+        char cur_commit_dir[1000];
+        strcpy(cur_commit_dir, cwd);
+        repo_to_commit(cur_commit_dir, 'c');
+        DIR *commit_folder = opendir(cur_commit_dir);
         struct dirent *commit_dir;
-        while ((commit_dir = readdir(commit)) != NULL)
+        while ((commit_dir = readdir(commit_folder)) != NULL)
         {
-            if (commit_dir->d_type != 0 || strcmp(dir->d_name, "commitInfo.txt") == 0)
+            if (commit_dir->d_type != 0 || strcmp(commit_dir->d_name, "commitInfo.txt") == 0)
                 continue;
             char comtorepo[1000];
-            strcpy(comtorepo, last_commit_dir);
+            strcpy(comtorepo, cur_commit_dir);
             commit_to_repo(comtorepo);
             delete = alreadyExists(commit_dir->d_name, comtorepo);
             if (delete == 0)
@@ -1863,26 +1867,26 @@ int main(int argc, char *argv[])
                 continue;
             }
         }
-        strcpy(org_to_commit, org_f_address);
-        repo_to_commit(org_to_commit, 'l');
-        strcpy(last_commit_dir, org_to_commit);
-        back_one(last_commit_dir);
-        DIR *commitp = opendir(last_commit_dir);
-        struct dirent *commit_dirp;
-        while ((commit_dirp = readdir(commitp)) != NULL)
-        {
-            if (commit_dirp->d_type != 0 || strcmp(dir->d_name, "commitInfo.txt") == 0)
-                continue;
-            char comtorepo[1000];
-            strcpy(comtorepo, last_commit_dir);
-            commit_to_repo(comtorepo);
-            delete = alreadyExists(commit_dirp->d_name, comtorepo);
-            if (delete == 0)
-            {
-                printf("    %s --> +D\n", commit_dirp->d_name);
-                continue;
-            }
-        }
+        // strcpy(org_to_commit, org_f_address);
+        // repo_to_commit(org_to_commit, 'l');
+        // strcpy(cur_commit_dir, org_to_commit);
+        // back_one(cur_commit_dir);
+        // DIR *commitp = opendir(cur_commit_dir);
+        // struct dirent *commit_dirp;
+        // while ((commit_dirp = readdir(commitp)) != NULL)
+        // {
+        //     if (commit_dirp->d_type != 0 || strcmp(commit_dir->d_name, "commitInfo.txt") == 0)
+        //         continue;
+        //     char comtorepo[1000];
+        //     strcpy(comtorepo, cur_commit_dir);
+        //     commit_to_repo(comtorepo);
+        //     delete = alreadyExists(commit_dirp->d_name, comtorepo);
+        //     if (delete == 0)
+        //     {
+        //         printf("    %s --> +D\n", commit_dirp->d_name);
+        //         continue;
+        //     }
+        // }
     }
     else if (strcmp(argv[1], "commit") == 0)
     {
