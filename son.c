@@ -673,6 +673,10 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc >= 4 && strcmp(argv[1], "tag") == 0 && strcmp(argv[2], "-a") == 0)
         return 1;
+    if (argc == 2 && strcmp(argv[1], "tag") == 0)
+        return 1;
+    if (argc == 4 && strcmp(argv[1], "tag") == 0 && strcmp(argv[2], "show") == 0)
+        return 1;
     return 0;
 }
 
@@ -911,6 +915,11 @@ int makeRepo()
     FILE *master = fopen(master_branch, "w");
     fprintf(master, "master\ncommit0.0\n");
     fclose(master);
+    char tags_address[1000];
+    getcwd(tags_address, 1000);
+    forward_one(tags_address, ".son\\tags.txt");
+    FILE *tags = fopen(tags_address, "w");
+    fclose(tags);
     char cur_cm[1000];
     strcpy(cur_cm, cwd);
     forward_one(cur_cm, ".son\\curr_commit.txt");
@@ -1142,13 +1151,40 @@ int cur_commitID()
 {
     char dot_son[1000];
     repoExists(dot_son);
-    forward_one(dot_son, "curr_commit.txt");
-    FILE *cID = fopen(dot_son, "r");
-    char IDstring[100];
-    int ID, junk;
-    fgets(IDstring, 100, cID);
-    sscanf(IDstring, "commit%d.%d", &ID, &junk);
-    return ID + 1000;
+    forward_one(dot_son, "commitID.txt");
+    FILE *IDs = fopen(dot_son, "r");
+    int last;
+    char line[1000];
+    while (fgets(line, 1000, IDs) != NULL)
+        sscanf(line, "%d", &last);
+    printf("(%d)", last);
+    fclose(IDs);
+    return last + 1;
+}
+
+int delete_line(char line[], char address[])
+{
+    FILE *file = fopen(address, "r");
+    char lines[100][1000];
+    strcpy(lines[0], line);
+    int index = 0, delete = -1;
+    while (fgets(lines[index], 1000, file) != NULL)
+    {
+        if (*(lines[index] + strlen(lines[index]) - 1) == '\n')
+            *(lines[index] + strlen(lines[index]) - 1) = '\0';
+        if (strcmp(line, lines[index]) == 0)
+            delete = index;
+        index++;
+    }
+    fclose(file);
+    if (delete == -1)
+        return 1;
+    FILE *new_file = fopen(address, "w");
+    for (int i = 0; i < index; i++)
+        if (i != delete)
+            fprintf(new_file, "%s\n", lines[i]);
+    fclose(new_file);
+    return 0;
 }
 
 int append_line_at_top(char line[], char address[])
@@ -1163,6 +1199,48 @@ int append_line_at_top(char line[], char address[])
     FILE *new_file = fopen(address, "w");
     for (int i = 0; i < index; i++)
         fprintf(new_file, "%s", lines[i]);
+    fclose(new_file);
+    return 0;
+}
+
+int lower_case(char str[])
+{
+    for (int i = 0; i < strlen(str); i++)
+    {
+        if (*(str + i) >= 'A' && *(str + i) <= 'Z')
+            *(str + i) += 32;
+    }
+    return 0;
+}
+
+int alphabetic_order(char address[])
+{
+    FILE *file = fopen(address, "r");
+    char lines[100][1000];
+    int index = 0;
+    while (fgets(lines[index], 1000, file) != NULL)
+    {
+        if (*(lines[index] + strlen(lines[index]) - 1) == '\n')
+            *(lines[index] + strlen(lines[index]) - 1) = '\0';
+        lower_case(lines[index]);
+        index++;
+    }
+    fclose(file);
+    for (int i = 0; i < index - 1; i++)
+    {
+        if (strcmp(lines[i], lines[i + 1]) > 0)
+        {
+            char temp[1000];
+            strcpy(temp, lines[i + 1]);
+            strcpy(lines[i + 1], lines[i]);
+            strcpy(lines[i], temp);
+            i = 0;
+        }
+    }
+
+    FILE *new_file = fopen(address, "w");
+    for (int i = 0; i < index; i++)
+        fprintf(new_file, "%s\n", lines[i]);
     fclose(new_file);
     return 0;
 }
@@ -1726,8 +1804,192 @@ int remove_folder_files(char folder_address[])
     return 0;
 }
 
+int tagfunc(int argc, char *argv[])
+{
+    char tag[1000];
+    strcpy(tag, argv[3]);
+    char tags_file_address[1000];
+    repoExists(tags_file_address);
+    forward_one(tags_file_address, "tags.txt");
+    if (line_exists(tags_file_address, argv[3]) == 1)
+    {
+        int flag = 0;
+        for (int i = 3; i < argc; i++)
+        {
+            if (strcmp(argv[i], "-f") == 0)
+                flag = 1;
+        }
+        if (flag == 0)
+        {
+            printf("Tag already exists!\nIn order to overwrite use the '-f' argument\n");
+            exit(1);
+        }
+        else
+        {
+            char dot_son[1000];
+            repoExists(dot_son);
+            DIR *son = opendir(dot_son);
+            struct dirent *dir;
+            while ((dir = readdir(son)) != NULL)
+            {
+                if (strstr(dir->d_name, "commit") != NULL && dir->d_type == 16)
+                {
+                    char tag_file_address[1000];
+                    strcpy(tag_file_address, dot_son);
+                    forward_one(tag_file_address, dir->d_name);
+                    if (alreadyExists("tag.txt", tag_file_address) == 0)
+                        continue;
+                    forward_one(tag_file_address, "tag.txt");
+                    FILE *tag_file = fopen(tag_file_address, "r");
+                    char line[1000];
+                    fgets(line, 1000, tag_file);
+                    fclose(tag_file);
+                    if (*(line + strlen(line) - 1) == '\n')
+                        *(line + strlen(line) - 1) = '\0';
+                    if (strcmp(tag, line) == 0)
+                    {
+                        remove(tag_file_address);
+                        break;
+                    }
+                }
+            }
+            char tags_file_address[1000];
+            repoExists(tags_file_address);
+            forward_one(tags_file_address, "tags.txt");
+            delete_line(tag, tags_file_address);
+        }
+    }
+
+    char message[1000];
+    int commitID, c_exists, m_exists;
+
+    for (int i = 3; i < argc; i++)
+    {
+        if (strcmp(argv[i], "-c") == 0)
+        {
+            sscanf(argv[i + 1], "%d", &commitID);
+            c_exists = 1;
+        }
+        if (strcmp(argv[i], "-m") == 0)
+        {
+            strcpy(message, argv[i + 1]);
+            m_exists = 1;
+        }
+    }
+
+    time_t mytime = time(NULL);
+    char *time_str = ctime(&mytime);
+    time_str[strlen(time_str) - 1] = '\0';
+    strcpy(time_str, time_str + 4);
+    FILE *tag_file;
+    char commit_name[1000];
+    char username[1000];
+    username_read(username);
+
+    if (c_exists == 1)
+    {
+        commit_ID_to_number_dot_number(commitID, commit_name);
+        char tag_file_address[1000];
+        repoExists(tag_file_address);
+        forward_one(tag_file_address, commit_name);
+        forward_one(tag_file_address, "tag.txt");
+        tag_file = fopen(tag_file_address, "w");
+        fprintf(tag_file, "%s\n", tag);
+        fprintf(tag_file, "%d\n", commitID);
+        fprintf(tag_file, "%s\n", username);
+        fprintf(tag_file, "%s\n", time_str);
+        if (m_exists == 1)
+            fprintf(tag_file, "%s\n", message);
+        else
+            fprintf(tag_file, "(null)");
+    }
+    else
+    {
+        char commit_address[1000];
+        last_commit(commit_address);
+        strcpy(commit_name, commit_address);
+        char commit_info_address[1000];
+        strcpy(commit_info_address, commit_address);
+        forward_one(commit_info_address, "commitInfo.txt");
+        FILE *commitInfo = fopen(commit_info_address, "r");
+        char line[1000];
+        fgets(line, 1000, commitInfo);
+        fclose(commitInfo);
+        sscanf(line, "%d", &commitID);
+
+        char tag_file_address[1000];
+        strcpy(tag_file_address, commit_address);
+        forward_one(tag_file_address, "tag.txt");
+        tag_file = fopen(tag_file_address, "w");
+        fprintf(tag_file, "%s\n", tag);
+        fprintf(tag_file, "%d\n", commitID);
+        fprintf(tag_file, "%s\n", username);
+        fprintf(tag_file, "%s\n", time_str);
+        if (m_exists == 1)
+            fprintf(tag_file, "%s\n", message);
+        else
+            fprintf(tag_file, "(null)");
+    }
+    fclose(tag_file);
+    printf("Successfully done!\n");
+    strcat(tag, "\n");
+    append_line_at_top(tag, tags_file_address);
+}
+
+int show_tag(char tag[])
+{
+    char dot_son[1000];
+    repoExists(dot_son);
+    DIR *son = opendir(dot_son);
+    struct dirent *dir;
+    while ((dir = readdir(son)) != NULL)
+    {
+        if (strstr(dir->d_name, "commit") != NULL && dir->d_type == 16)
+        {
+            char tag_file_address[1000];
+            strcpy(tag_file_address, dot_son);
+            forward_one(tag_file_address, dir->d_name);
+            if (alreadyExists("tag.txt", tag_file_address) == 0)
+                continue;
+            forward_one(tag_file_address, "tag.txt");
+            FILE *tag_file = fopen(tag_file_address, "r");
+            char line[1000];
+            fgets(line, 1000, tag_file);
+            if (*(line + strlen(line) - 1) == '\n')
+                *(line + strlen(line) - 1) = '\0';
+            if (strcmp(tag, line) == 0)
+            {
+                char commitID[1000], username[1000], time_str[1000], message[1000];
+                fgets(commitID, 1000, tag_file);
+                if (*(commitID + strlen(commitID) - 1) == '\n')
+                    *(commitID + strlen(commitID) - 1) = '\0';
+                fgets(username, 1000, tag_file);
+                if (*(username + strlen(username) - 1) == '\n')
+                    *(username + strlen(username) - 1) = '\0';
+                fgets(time_str, 1000, tag_file);
+                if (*(time_str + strlen(time_str) - 1) == '\n')
+                    *(time_str + strlen(time_str) - 1) = '\0';
+                fgets(message, 1000, tag_file);
+                if (*(message + strlen(message) - 1) == '\n')
+                    *(message + strlen(message) - 1) = '\0';
+                printf("=============================================\n");
+                printf("Tag --> %s\n\n", tag);
+                printf("CommitID --> %s\n\n", commitID);
+                printf("Username --> %s\n\n", username);
+                printf("Time --> %s\n\n", time_str);
+                if (strcmp(message, "(null)") == 0)
+                    printf("Message --> Not specified by the user!\n\n");
+                else
+                    printf("Message --> %s\n\n", message);
+                printf("=============================================\n");
+            }
+        }
+    }
+}
+
 int main(int argc, char *argv[])
 {
+    alphabetic_order("c:\\Users\\ASUS\\Desktop\\t\\.son\\commit4.1\\a.txt");
     // repo address
     char *repo_address = (char *)malloc(1000);
     repoExists(repo_address);
@@ -2393,5 +2655,33 @@ int main(int argc, char *argv[])
             return 0;
         }
         printf("There are changes that have to be commited first!\n");
+    }
+    else if (strcmp(argv[1], "tag") == 0)
+    {
+        if (argc == 4 && strcmp(argv[1], "tag") == 0 && strcmp(argv[2], "show") == 0)
+        {
+            show_tag(argv[3]);
+            return 0;
+        }
+        if (argc == 2 && strcmp(argv[1], "tag") == 0)
+        {
+            char tags[100][1000];
+            char tags_file_address[1000];
+            repoExists(tags_file_address);
+            forward_one(tags_file_address, "tags.txt");
+            alphabetic_order(tags_file_address);
+            FILE *tags_file = fopen(tags_file_address, "r");
+            int index = 0;
+            while (fgets(tags[index], 1000, tags_file) != NULL)
+            {
+                if (*(tags[index] + strlen(tags[index]) - 1) == '\n')
+                    *(tags[index] + strlen(tags[index]) - 1) = '\0';
+                index++;
+            }
+            for (int i = 0; i < index; i++)
+                show_tag(tags[i]);
+            return 0;
+        }
+        tagfunc(argc, argv);
     }
 }
