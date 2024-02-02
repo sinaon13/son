@@ -5,6 +5,7 @@
 #include <time.h>
 
 char current_branch[1000];
+char current_branch_name[1000];
 int current_branch_ID;
 char current_commit[1000];
 
@@ -197,7 +198,7 @@ int repoExists(char *address)
         }
         getcwd(address, 1000);
         DIR *cur = opendir(address);
-        struct dirent *dirs = readdir(cur);
+        struct dirent *dirs;
         while ((dirs = readdir(cur)) != NULL)
         {
             if (strcmp(".son", dirs->d_name) == 0)
@@ -668,6 +669,10 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 3 && strcmp(argv[1], "checkout") == 0)
         return 1;
+    if (argc > 3 && strcmp(argv[1], "revert") == 0)
+        return 1;
+    if (argc >= 4 && strcmp(argv[1], "tag") == 0 && strcmp(argv[2], "-a") == 0)
+        return 1;
     return 0;
 }
 
@@ -842,35 +847,15 @@ int commit_n_folder(int n)
 {
     char commitfolder_address[1000];
     repoExists(commitfolder_address);
-    char wd[1000];
-    strcpy(wd, commitfolder_address);
-    forward_one(commitfolder_address, "commit");
-    char *m = (char *)malloc(100);
-    sprintf(m, "%d.%d", n, current_branch_ID);
-    strcpy(commitfolder_address + strlen(commitfolder_address), m);
-    mkdir(commitfolder_address);
-    *(wd + strlen(wd) - 5) = '\0';
-    DIR *currentDir = opendir(wd);
-    struct dirent *dir;
-    while ((dir = readdir(currentDir)) != NULL)
-    {
-        if (strcmp(dir->d_name, ".son") == 0)
-            continue;
-        char org_f_address[1000];
-        strcpy(org_f_address, wd);
-        char type = type_of(dir->d_name, org_f_address);
-        forward_one(org_f_address, dir->d_name);
-        if (type == 'F')
-            copy_folder(dir->d_name, org_f_address, commitfolder_address);
-        else if (type == 'f')
-            copy_file(dir->d_name, org_f_address, commitfolder_address, 'n');
-    }
-    repoExists(wd);
     char name[1000];
     sprintf(name, "commit%d.%d", n, current_branch_ID);
+    forward_one(commitfolder_address, name);
+    mkdir(commitfolder_address);
     char name2[1000];
     sprintf(name2, "commit%d.%d", n - 1, current_branch_ID);
     char org_f_address[1000];
+    char wd[1000];
+    repoExists(wd);
     strcpy(org_f_address, wd);
     forward_one(org_f_address, name2);
     copy_folder(name, org_f_address, wd);
@@ -1157,20 +1142,29 @@ int cur_commitID()
 {
     char dot_son[1000];
     repoExists(dot_son);
-    forward_one(dot_son, "commitID.txt");
+    forward_one(dot_son, "curr_commit.txt");
     FILE *cID = fopen(dot_son, "r");
     char IDstring[100];
-    int ID;
+    int ID, junk;
     fgets(IDstring, 100, cID);
-    while (1)
-    {
-        sscanf(IDstring, "%d", &ID);
-        if (fgets(IDstring, 100, cID) == NULL)
-        {
-            fclose(cID);
-            return ID;
-        }
-    }
+    sscanf(IDstring, "commit%d.%d", &ID, &junk);
+    return ID + 1000;
+}
+
+int append_line_at_top(char line[], char address[])
+{
+    FILE *file = fopen(address, "r");
+    char lines[100][1000];
+    strcpy(lines[0], line);
+    int index = 1;
+    while (fgets(lines[index], 1000, file) != NULL)
+        index++;
+    fclose(file);
+    FILE *new_file = fopen(address, "w");
+    for (int i = 0; i < index; i++)
+        fprintf(new_file, "%s", lines[i]);
+    fclose(new_file);
+    return 0;
 }
 
 int commitfunc(char *argv3)
@@ -1187,7 +1181,6 @@ int commitfunc(char *argv3)
     if (a[0] != b)
     {
         int commitID = cur_commitID();
-        commitID++;
         time_t mytime = time(NULL);
         char *time_str = ctime(&mytime);
         time_str[strlen(time_str) - 1] = '\0';
@@ -1197,15 +1190,17 @@ int commitfunc(char *argv3)
             exit(1);
         char commit_info_file[1000];
         int n = cur_commit(commit_info_file);
+        commit_n_folder(n + 1);
         forward_one(commit_info_file, "commitInfo.txt");
         FILE *info = fopen(commit_info_file, "w");
-        fprintf(info, "%d\n%s\n%s\n%s\n%d", commitID, argv3, name, time_str, count);
+        fprintf(info, "%d\n%s\n%s\n%s\n%s\n%d\n%d", commitID, argv3, name, time_str, current_branch_name, current_branch_ID, count);
         printf("'''''''''''''''''''''''''''''''''''\n");
         printf("Succsessful!\n\n");
         printf("Commit ID --> %d\n\n", commitID);
         printf("Commit message --> %s\n\n", argv3);
         printf("Username --> %s\n\n", name);
         printf("Time --> %s\n\n", time_str);
+        printf("branch --> %s (branchId: %d)\n\n", current_branch_name, current_branch_ID);
         printf("Commited files/folders count --> %d\n\n", count);
         printf("'''''''''''''''''''''''''''''''''''");
         fclose(info);
@@ -1216,7 +1211,6 @@ int commitfunc(char *argv3)
         fclose(c_br);
         back_one(dot_son);
         forward_one(dot_son, "added.txt");
-        commit_n_folder(n);
         FILE *addednew = fopen(dot_son, "w");
         fclose(addednew);
         back_one(dot_son);
@@ -1230,6 +1224,12 @@ int commitfunc(char *argv3)
         FILE *cr_cm = fopen(curr_commit_address, "w");
         fprintf(cr_cm, "commit%d.%d", n + 1, current_branch_ID);
         fclose(cr_cm);
+        char commit_names_in_order[1000];
+        repoExists(commit_names_in_order);
+        forward_one(commit_names_in_order, "orderc.txt");
+        char line[1000];
+        sprintf(line, "commit%d.%d\n", n, current_branch_ID);
+        append_line_at_top(line, commit_names_in_order);
 
         return 0;
     }
@@ -1240,17 +1240,57 @@ int commitfunc(char *argv3)
     }
 }
 
+int branchID_to_branchName(int n, char result[])
+{
+    char dot_son[1000];
+    repoExists(dot_son);
+    DIR *son = opendir(dot_son);
+    struct dirent *dir;
+    while ((dir = readdir(son)) != NULL)
+    {
+        if (strstr(dir->d_name, "branch") != NULL && dir->d_name[0] != 'c')
+        {
+            int ID;
+            sscanf(dir->d_name, "branch%d.txt", &ID);
+            if (n != ID)
+                continue;
+            char file_address[1000];
+            strcpy(file_address, dot_son);
+            forward_one(file_address, dir->d_name);
+            FILE *branchInfo = fopen(file_address, "r");
+            char branch_name[1000];
+            fgets(branch_name, 1000, branchInfo);
+            if (*(branch_name + strlen(branch_name) - 1) == '\n')
+                *(branch_name + strlen(branch_name) - 1) = '\0';
+            fclose(branchInfo);
+            strcpy(result, branch_name);
+            return 0;
+        }
+    }
+}
+
 int log_n(int n)
 {
-    char name[1000];
-    sprintf(name, "commit%d.%d", n, current_branch_ID);
+    char orderfile[1000];
+    repoExists(orderfile);
+    forward_one(orderfile, "orderc.txt");
+    FILE *order = fopen(orderfile, "r");
+    char line[1000];
+    for (int i = 0; i < n; i++)
+        fgets(line, 1000, order);
+    if (*(line + strlen(line) - 1) == '\n')
+        *(line + strlen(line) - 1) = '\0';
+    char branch_name[1000];
+    int branchID, junk;
+    sscanf(line, "commit%d.%d", &junk, &branchID);
+    branchID_to_branchName(branchID, branch_name);
     char info_address[1000];
     repoExists(info_address);
-    forward_one(info_address, name);
+    forward_one(info_address, line);
     forward_one(info_address, "commitInfo.txt");
     FILE *info = fopen(info_address, "r");
     int ID, count;
-    char message[1000], username[1000], time[1000], line[1000];
+    char message[1000], username[1000], time[1000];
     fgets(line, 1000, info);
     sscanf(line, "%d", &ID);
     fgets(line, 1000, info);
@@ -1266,28 +1306,41 @@ int log_n(int n)
     if (*(time + strlen(time) - 1) == '\n')
         *(time + strlen(time) - 1) = '\0';
     fgets(line, 1000, info);
+    fgets(line, 1000, info);
+    fgets(line, 1000, info);
     sscanf(line, "%d", &count);
     printf("'''''''''''''''''''''''''''''''''''\n");
-    printf("Succsessful!\n\n");
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
     printf("Username --> %s\n\n", username);
     printf("Time --> %s\n\n", time);
+    printf("branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
     printf("'''''''''''''''''''''''''''''''''''");
 }
 
 int log_n_with_author(int n, char author[])
 {
-    char name[1000];
-    sprintf(name, "commit%d.%d", n, current_branch_ID);
+    char orderfile[1000];
+    repoExists(orderfile);
+    forward_one(orderfile, "orderc.txt");
+    FILE *order = fopen(orderfile, "r");
+    char line[1000];
+    for (int i = 0; i < n; i++)
+        fgets(line, 1000, order);
+    if (*(line + strlen(line) - 1) == '\n')
+        *(line + strlen(line) - 1) = '\0';
+    char branch_name[1000];
+    int branchID, junk;
+    sscanf(line, "commit%d.%d", &junk, &branchID);
+    branchID_to_branchName(branchID, branch_name);
     char info_address[1000];
     repoExists(info_address);
-    forward_one(info_address, name);
+    forward_one(info_address, line);
     forward_one(info_address, "commitInfo.txt");
     FILE *info = fopen(info_address, "r");
     int ID, count;
-    char message[1000], username[1000], time[1000], line[1000];
+    char message[1000], username[1000], time[1000];
     fgets(line, 1000, info);
     sscanf(line, "%d", &ID);
     fgets(line, 1000, info);
@@ -1298,20 +1351,23 @@ int log_n_with_author(int n, char author[])
     strcpy(username, line);
     if (*(username + strlen(username) - 1) == '\n')
         *(username + strlen(username) - 1) = '\0';
-    if (strcmp(username, author) != 0)
-        return 1;
     fgets(line, 1000, info);
     strcpy(time, line);
     if (*(time + strlen(time) - 1) == '\n')
         *(time + strlen(time) - 1) = '\0';
     fgets(line, 1000, info);
+    fgets(line, 1000, info);
+    fgets(line, 1000, info);
     sscanf(line, "%d", &count);
+    if (strcmp(username, author) != 0)
+        return 1;
     printf("'''''''''''''''''''''''''''''''''''\n");
     printf("Succsessful!\n\n");
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
     printf("Username --> %s\n\n", username);
     printf("Time --> %s\n\n", time);
+    printf("Branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
     printf("'''''''''''''''''''''''''''''''''''");
     return 0;
@@ -1355,15 +1411,26 @@ int compare_time(char time[][1000], char given_time[][1000])
 
 int log_n_with_time(int n, char which[], char given_time[])
 {
-    char name[1000];
-    sprintf(name, "commit%d.%d", n, current_branch_ID);
+    char orderfile[1000];
+    repoExists(orderfile);
+    forward_one(orderfile, "orderc.txt");
+    FILE *order = fopen(orderfile, "r");
+    char line[1000];
+    for (int i = 0; i < n; i++)
+        fgets(line, 1000, order);
+    if (*(line + strlen(line) - 1) == '\n')
+        *(line + strlen(line) - 1) = '\0';
+    char branch_name[1000];
+    int branchID, junk;
+    sscanf(line, "commit%d.%d", &junk, &branchID);
+    branchID_to_branchName(branchID, branch_name);
     char info_address[1000];
     repoExists(info_address);
-    forward_one(info_address, name);
+    forward_one(info_address, line);
     forward_one(info_address, "commitInfo.txt");
     FILE *info = fopen(info_address, "r");
     int ID, count;
-    char message[1000], username[1000], time[1000], line[1000];
+    char message[1000], username[1000], time[1000];
     fgets(line, 1000, info);
     sscanf(line, "%d", &ID);
     fgets(line, 1000, info);
@@ -1378,6 +1445,8 @@ int log_n_with_time(int n, char which[], char given_time[])
     strcpy(time, line);
     if (*(time + strlen(time) - 1) == '\n')
         *(time + strlen(time) - 1) = '\0';
+    fgets(line, 1000, info);
+    fgets(line, 1000, info);
     fgets(line, 1000, info);
     sscanf(line, "%d", &count);
     if (strcmp(which, "-since") == 0)
@@ -1404,6 +1473,7 @@ int log_n_with_time(int n, char which[], char given_time[])
     printf("Commit message --> %s\n\n", message);
     printf("Username --> %s\n\n", username);
     printf("Time --> %s\n\n", time);
+    printf("Branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
     printf("'''''''''''''''''''''''''''''''''''");
     return 0;
@@ -1411,15 +1481,26 @@ int log_n_with_time(int n, char which[], char given_time[])
 
 int log_n_with_search(int n, char word[])
 {
-    char name[1000];
-    sprintf(name, "commit%d.%d", n, current_branch_ID);
+    char orderfile[1000];
+    repoExists(orderfile);
+    forward_one(orderfile, "orderc.txt");
+    FILE *order = fopen(orderfile, "r");
+    char line[1000];
+    for (int i = 0; i < n; i++)
+        fgets(line, 1000, order);
+    if (*(line + strlen(line) - 1) == '\n')
+        *(line + strlen(line) - 1) = '\0';
+    char branch_name[1000];
+    int branchID, junk;
+    sscanf(line, "commit%d.%d", &junk, &branchID);
+    branchID_to_branchName(branchID, branch_name);
     char info_address[1000];
     repoExists(info_address);
-    forward_one(info_address, name);
+    forward_one(info_address, line);
     forward_one(info_address, "commitInfo.txt");
     FILE *info = fopen(info_address, "r");
     int ID, count;
-    char message[1000], username[1000], time[1000], line[1000];
+    char message[1000], username[1000], time[1000];
     fgets(line, 1000, info);
     sscanf(line, "%d", &ID);
     fgets(line, 1000, info);
@@ -1435,15 +1516,17 @@ int log_n_with_search(int n, char word[])
     if (*(time + strlen(time) - 1) == '\n')
         *(time + strlen(time) - 1) = '\0';
     fgets(line, 1000, info);
+    fgets(line, 1000, info);
+    fgets(line, 1000, info);
     sscanf(line, "%d", &count);
     if (word_exists(word, message) == 0)
         return 1;
     printf("'''''''''''''''''''''''''''''''''''\n");
-    printf("Succsessful!\n\n");
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
     printf("Username --> %s\n\n", username);
     printf("Time --> %s\n\n", time);
+    printf("Branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
     printf("'''''''''''''''''''''''''''''''''''");
     return 0;
@@ -1453,7 +1536,6 @@ int make_branch(char name[])
 {
     char org_commit[1000];
     int n = last_commit(org_commit);
-    printf("(%s)", org_commit);
     char cop_folder[1000];
     strcpy(cop_folder, org_commit);
     back_one(cop_folder);
@@ -1475,11 +1557,65 @@ int make_branch(char name[])
     FILE *br = fopen(cop_folder, "w");
     fprintf(br, "%s\ncommit%d.%d\n", name, n, m);
     fclose(br);
+    //
+    char commitfolder_address[1000];
+    repoExists(commitfolder_address);
+    char name1[1000];
+    sprintf(name1, "commit%d.%d", n + 1, m);
+    forward_one(commitfolder_address, name1);
+    mkdir(commitfolder_address);
+    char name2[1000];
+    sprintf(name2, "commit%d.%d", n, m);
+    char org_f_address[1000];
+    char wd[1000];
+    repoExists(wd);
+    strcpy(org_f_address, wd);
+    forward_one(org_f_address, name2);
+    copy_folder(name1, org_f_address, wd);
+    //
     printf("A new branch with the name \"%s\" was created\n", name);
     return 0;
 }
 
-int check_if_head() {}
+int find_head(int branchID)
+{
+    char dot_son[1000];
+    repoExists(dot_son);
+    DIR *son = opendir(dot_son);
+    struct dirent *dir;
+    int n, check_branch, max = 0;
+    while ((dir = readdir(son)) != NULL)
+    {
+        if (strstr(dir->d_name, "commit") != NULL && dir->d_type == 16)
+        {
+            sscanf(dir->d_name, "commit%d.%d", &n, &check_branch);
+            if (check_branch != branchID)
+                continue;
+            if (n > max)
+                max = n;
+        }
+    }
+    return max;
+}
+
+int check_if_head()
+{
+    char cr_cm_address[1000];
+    repoExists(cr_cm_address);
+    forward_one(cr_cm_address, "curr_commit.txt");
+    FILE *cr_cm = fopen(cr_cm_address, "r");
+    char cur_commit[1000];
+    fgets(cur_commit, 1000, cr_cm);
+    if (*(cur_commit + strlen(cur_commit) - 1) == '\n')
+        *(cur_commit + strlen(cur_commit) - 1) = '\0';
+    int n, branchID;
+    sscanf(cur_commit, "commit%d.%d", &n, &branchID);
+    int head = find_head(branchID);
+    if (n == head)
+        return 1;
+    else
+        return 0;
+}
 
 int copy_n_commit_to_repo(char commit_folder_address[])
 {
@@ -1520,42 +1656,73 @@ int address_converter(char address[])
     char cwd[1000];
     getcwd(cwd, 1000);
     int count = count_words_slash(address);
-    char sep[count][1000];
-    slash_separator(address, sep);
-    for (int i = 0; i < count; i++)
+    if (count > 1 || *address != '.')
     {
-        if (strcmp(sep[i], ".") == 0)
-        {
-            char wd[1000];
-            getcwd(wd, 1000);
-            strcpy(sep[i], wd);
-        }
-        if (strcmp(sep[i], "..") == 0)
-        {
-            chdir("..");
-            char wd[1000];
-            getcwd(wd, 1000);
-            strcpy(sep[i], wd);
-        }
-    }
-    chdir(cwd);
-    char new_address[1000];
-    strcpy(new_address, sep[0]);
-    for (int i = 1; i < count; i++)
-    {
-        forward_one(new_address, sep[i]);
-    }
-    if (strstr(new_address, "c:\\") == NULL && strstr(new_address, "D:\\") == NULL && strstr(new_address, "C:\\") == NULL || strstr(new_address, "D:\\") != NULL)
-    {
-        strcpy(new_address, cwd);
+        char sep[count][1000];
+        slash_separator(address, sep);
         for (int i = 0; i < count; i++)
+        {
+            if (strcmp(sep[i], ".") == 0)
+            {
+                char wd[1000];
+                getcwd(wd, 1000);
+                strcpy(sep[i], wd);
+            }
+            if (strcmp(sep[i], "..") == 0)
+            {
+                chdir("..");
+                char wd[1000];
+                getcwd(wd, 1000);
+                strcpy(sep[i], wd);
+            }
+        }
+        chdir(cwd);
+        char new_address[1000];
+        strcpy(new_address, sep[0]);
+        for (int i = 1; i < count; i++)
         {
             forward_one(new_address, sep[i]);
         }
+        if (strstr(new_address, "c:\\") == NULL && strstr(new_address, "D:\\") == NULL && strstr(new_address, "C:\\") == NULL || strstr(new_address, "D:\\") != NULL)
+        {
+            strcpy(new_address, cwd);
+            for (int i = 0; i < count; i++)
+            {
+                forward_one(new_address, sep[i]);
+            }
+        }
+        strcpy(address, new_address);
+        if (*(address + strlen(address) - 1) == '\\')
+            *(address + strlen(address) - 1) = '\0';
     }
-    strcpy(address, new_address);
-    if (*(address + strlen(address) - 1) == '\\')
-        *(address + strlen(address) - 1) = '\0';
+    if (*(address) == '.' && *(address + 1) == '\\' && strlen(address) == 2)
+        strcpy(address, "current");
+    return 0;
+}
+
+int remove_folder_files(char folder_address[])
+{
+    DIR *folder = opendir(folder_address);
+    struct dirent *dir;
+    while ((dir = readdir(folder)) != NULL)
+    {
+        if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0)
+            continue;
+        if (dir->d_type == 0)
+        {
+            char file_address[1000];
+            strcpy(file_address, folder_address);
+            forward_one(file_address, dir->d_name);
+            remove(file_address);
+        }
+        else
+        {
+            char folder_in_folder_address[1000];
+            strcpy(folder_in_folder_address, folder_address);
+            forward_one(folder_in_folder_address, dir->d_name);
+            remove_folder_files(folder_in_folder_address);
+        }
+    }
     return 0;
 }
 
@@ -1597,8 +1764,15 @@ int main(int argc, char *argv[])
     fgets(current_branch, 1000, c_br);
     sscanf(current_branch, "branch%d", &current_branch_ID);
     fclose(c_br);
+    back_one(dot);
+    forward_one(dot, current_branch);
+    FILE *br_name = fopen(dot, "r");
+    fgets(current_branch_name, 1000, br_name);
+    fclose(br_name);
+    if (*(current_branch_name + strlen(current_branch_name) - 1) == '\n')
+        *(current_branch_name + strlen(current_branch_name) - 1) = '\0';
     // curr_commit
-    repoExists(dot);
+    back_one(dot);
     forward_one(dot, "curr_commit.txt");
     FILE *c_cm = fopen(dot, "r");
     fgets(current_commit, 1000, c_cm);
@@ -1617,6 +1791,11 @@ int main(int argc, char *argv[])
     }
     if (strcmp(argv[1], "add") == 0)
     {
+        if (check_if_head() == 0)
+        {
+            printf("You can't 'add' or 'commit' anything while you're not on HEAD!\nTry this --> 'son checkout HEAD'\n");
+            exit(1);
+        }
         int count = 0;
         char type;
         char org_f_address[1000];
@@ -1680,34 +1859,80 @@ int main(int argc, char *argv[])
             }
             for (int i = 3; i < argc; i++)
             {
-                char name[1000];
-                strcpy(name, argv[i]);
-                last_maker(name);
-                char folder_address[1000];
-                strcpy(folder_address, argv[i]);
-                back_one(folder_address);
-                char type = type_of(name, folder_address);
-                if (alreadyExists(name, folder_address) == 0)
+                if (strcmp(argv[i], "current") != 0)
                 {
-                    printf("** %s doesn't seem to exist!\n", name);
-                    count++;
+                    char name[1000];
+                    strcpy(name, argv[i]);
+                    last_maker(name);
+                    char folder_address[1000];
+                    strcpy(folder_address, argv[i]);
+                    back_one(folder_address);
+                    char type = type_of(name, folder_address);
+                    if (alreadyExists(name, folder_address) == 0)
+                    {
+                        printf("** %s doesn't seem to exist!\n", name);
+                        count++;
+                        continue;
+                    }
+                    char cur_commit_folder[1000];
+                    strcpy(cur_commit_folder, argv[i]);
+                    repo_to_commit(cur_commit_folder, 'c');
+                    char folder_delete[1000];
+                    strcpy(folder_delete, cur_commit_folder);
+                    back_one(cur_commit_folder);
+                    if (type == 'F')
+                    {
+                        remove_folder_files(folder_delete);
+                        mkdir(folder_delete);
+                        copy_folder(name, argv[i], cur_commit_folder);
+                        if (line_exists(added_address, argv[i]) == 0)
+                            fprintf(added, "%s\n", argv[i]);
+                        append_added(added, argv[i]);
+                    }
+                    else if (type == 'f')
+                    {
+                        copy_file(name, argv[i], cur_commit_folder, 'n');
+                        if (line_exists(added_address, argv[i]) == 0)
+                            fprintf(added, "%s\n", argv[i]);
+                    }
                 }
-                char cur_commit_folder[1000];
-                strcpy(cur_commit_folder, argv[i]);
-                repo_to_commit(cur_commit_folder, 'c');
-                back_one(cur_commit_folder);
-                if (type == 'F')
+                else
                 {
-                    copy_folder(name, argv[i], cur_commit_folder);
-                    if (line_exists(added_address, argv[i]) == 0)
-                        fprintf(added, "%s\n", argv[i]);
-                    append_added(added, argv[i]);
-                }
-                else if (type == 'f')
-                {
-                    copy_file(name, argv[i], cur_commit_folder, 'n');
-                    if (line_exists(added_address, argv[i]) == 0)
-                        fprintf(added, "%s\n", argv[i]);
+                    char current_folder[1000];
+                    repoExists(current_folder);
+                    char cur_commit_folder[1000];
+                    strcpy(cur_commit_folder, current_folder);
+                    back_one(cur_commit_folder);
+                    repo_to_commit(cur_commit_folder, 'c');
+                    back_one(current_folder);
+                    DIR *repo = opendir(current_folder);
+                    struct dirent *dir;
+                    while ((dir = readdir(repo)) != NULL)
+                    {
+                        if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0 || strcmp(dir->d_name, ".son") == 0)
+                            continue;
+                        char folder_delete[1000];
+                        strcpy(folder_delete, cur_commit_folder);
+                        forward_one(folder_delete, dir->d_name);
+                        char org_f_address[1000];
+                        strcpy(org_f_address, current_folder);
+                        forward_one(org_f_address, dir->d_name);
+                        if (dir->d_type == 16)
+                        {
+                            remove_folder_files(folder_delete);
+                            mkdir(folder_delete);
+                            copy_folder(dir->d_name, org_f_address, cur_commit_folder);
+                            if (line_exists(added_address, org_f_address) == 0)
+                                fprintf(added, "%s\n", org_f_address);
+                            append_added(added, org_f_address);
+                        }
+                        else
+                        {
+                            copy_file(dir->d_name, org_f_address, cur_commit_folder, 'n');
+                            if (line_exists(added_address, org_f_address) == 0)
+                                fprintf(added, "%s\n", org_f_address);
+                        }
+                    }
                 }
             }
             printf("%d items were succsessfully added to staging area.\n", argc - 3 - count);
@@ -1750,34 +1975,82 @@ int main(int argc, char *argv[])
             address_converter(temp_arg);
             argv[2] = (char *)malloc(1000);
             strcpy(argv[2], temp_arg);
-
-            char name[1000];
-            strcpy(name, argv[2]);
-            last_maker(name);
-            char folder_address[1000];
-            strcpy(folder_address, argv[2]);
-            back_one(folder_address);
-            char type = type_of(name, folder_address);
-            if (alreadyExists(name, folder_address) == 0)
-                printf("** %s doesn't seem to exist!\n", name);
-            char cur_commit_folder[1000];
-            strcpy(cur_commit_folder, argv[2]);
-            repo_to_commit(cur_commit_folder, 'c');
-            back_one(cur_commit_folder);
-            if (type == 'F')
+            if (strcmp(argv[2], "current") != 0)
             {
-                copy_folder(name, argv[2], cur_commit_folder);
-                if (line_exists(added_address, argv[2]) == 0)
-                    fprintf(added, "%s\n", argv[2]);
-                append_added(added, argv[2]);
+                char name[1000];
+                strcpy(name, argv[2]);
+                last_maker(name);
+                char folder_address[1000];
+                strcpy(folder_address, argv[2]);
+                back_one(folder_address);
+                char type = type_of(name, folder_address);
+                if (alreadyExists(name, folder_address) == 0)
+                {
+                    printf("** %s doesn't seem to exist!\n", name);
+                    return 1;
+                }
+                char cur_commit_folder[1000];
+                strcpy(cur_commit_folder, argv[2]);
+                repo_to_commit(cur_commit_folder, 'c');
+                char folder_delete[1000];
+                strcpy(folder_delete, cur_commit_folder);
+                back_one(cur_commit_folder);
+                if (type == 'F')
+                {
+                    remove_folder_files(folder_delete);
+                    mkdir(folder_delete);
+                    copy_folder(name, argv[2], cur_commit_folder);
+                    if (line_exists(added_address, argv[2]) == 0)
+                        fprintf(added, "%s\n", argv[2]);
+                    append_added(added, argv[2]);
+                }
+                else if (type == 'f')
+                {
+                    copy_file(name, argv[2], cur_commit_folder, 'n');
+                    printf("(%s)(%s)(%s)", name, argv[2], cur_commit_folder);
+                    if (line_exists(added_address, argv[2]) == 0)
+                        fprintf(added, "%s\n", argv[2]);
+                }
             }
-            else if (type == 'f')
+            else
             {
-                copy_file(name, argv[2], cur_commit_folder, 'n');
-                if (line_exists(added_address, argv[2]) == 0)
-                    fprintf(added, "%s\n", argv[2]);
+                char current_folder[1000];
+                repoExists(current_folder);
+                char cur_commit_folder[1000];
+                strcpy(cur_commit_folder, current_folder);
+                back_one(cur_commit_folder);
+                repo_to_commit(cur_commit_folder, 'c');
+                back_one(current_folder);
+                DIR *repo = opendir(current_folder);
+                struct dirent *dir;
+                while ((dir = readdir(repo)) != NULL)
+                {
+                    if (strcmp(dir->d_name, ".") == 0 || strcmp(dir->d_name, "..") == 0 || strcmp(dir->d_name, ".son") == 0)
+                        continue;
+                    char folder_delete[1000];
+                    strcpy(folder_delete, cur_commit_folder);
+                    forward_one(folder_delete, dir->d_name);
+                    char org_f_address[1000];
+                    strcpy(org_f_address, current_folder);
+                    forward_one(org_f_address, dir->d_name);
+                    if (dir->d_type == 16)
+                    {
+                        remove_folder_files(folder_delete);
+                        mkdir(folder_delete);
+                        copy_folder(dir->d_name, org_f_address, cur_commit_folder);
+                        if (line_exists(added_address, org_f_address) == 0)
+                            fprintf(added, "%s\n", org_f_address);
+                        append_added(added, org_f_address);
+                    }
+                    else
+                    {
+                        copy_file(dir->d_name, org_f_address, cur_commit_folder, 'n');
+                        if (line_exists(added_address, org_f_address) == 0)
+                            fprintf(added, "%s\n", org_f_address);
+                    }
+                }
             }
-            printf("%s was succsessfully added to staging area.\n", name);
+            printf("Succsessfully added to staging area.\n");
             fclose(added);
         }
         return 0;
@@ -1890,6 +2163,11 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(argv[1], "commit") == 0)
     {
+        if (check_if_head() == 0)
+        {
+            printf("You can't 'add' or 'commit' anything while you're not on HEAD!\nTry this --> 'son checkout HEAD'\n");
+            exit(1);
+        }
         if (strcmp(argv[2], "-s") == 0)
         {
             char message[1000];
@@ -1963,16 +2241,24 @@ int main(int argc, char *argv[])
         {
             int depth;
             sscanf(argv[3], "%d", &depth);
-            for (int i = n - 1; i > n - depth - 1; i--)
+            for (int i = 1; i <= depth; i++)
                 log_n(i);
         }
         else if (argc > 3 && strcmp(argv[2], "-author") == 0)
         {
-            for (int i = n - 1; i > 0; i--)
+            char order_address[1000];
+            repoExists(order_address);
+            forward_one(order_address, "orderc.txt");
+            n = line_counter(order_address);
+            for (int i = 1; i <= n; i++)
                 log_n_with_author(i, argv[3]);
         }
         else if (argc > 6 && (strcmp(argv[2], "-since") == 0 || strcmp(argv[2], "-before") == 0))
         {
+            char order_address[1000];
+            repoExists(order_address);
+            forward_one(order_address, "orderc.txt");
+            n = line_counter(order_address);
             char given_time[1000];
             strcpy(given_time, argv[3]);
             strcat(given_time, " ");
@@ -1981,17 +2267,27 @@ int main(int argc, char *argv[])
             strcat(given_time, argv[5]);
             strcat(given_time, " ");
             strcat(given_time, argv[6]);
-            for (int i = n - 1; i > 0; i--)
+            for (int i = 1; i <= n; i++)
                 log_n_with_time(i, argv[2], given_time);
         }
         else if (argc > 3 && strcmp(argv[2], "-search") == 0)
         {
-            for (int i = n - 1; i > 0; i--)
+            char order_address[1000];
+            repoExists(order_address);
+            forward_one(order_address, "orderc.txt");
+            n = line_counter(order_address);
+            for (int i = 1; i <= n; i++)
                 log_n_with_search(i, argv[3]);
         }
         else
-            for (int i = n - 1; i > 0; i--)
+        {
+            char order_address[1000];
+            repoExists(order_address);
+            forward_one(order_address, "orderc.txt");
+            n = line_counter(order_address);
+            for (int i = 1; i <= n; i++)
                 log_n(i);
+        }
     }
     else if (strcmp(argv[1], "branch") == 0)
     {
@@ -2057,6 +2353,14 @@ int main(int argc, char *argv[])
                     return 1;
                 }
             }
+            else if (argv[2][0] == 'H')
+            {
+                int n = find_head(current_branch_ID);
+                sprintf(commit_folder_name, "commit%d.%d", n, current_branch_ID);
+                sscanf(commit_folder_name, "commit%d.%d", &th, &branch);
+                printf("Successfully checked out to HEAD!\n");
+                return 0;
+            }
             else
             {
                 if (branch_name_to_number_dot_number(argv[2], commit_folder_name) == 0)
@@ -2088,6 +2392,6 @@ int main(int argc, char *argv[])
             printf("Successfully checked out!\n");
             return 0;
         }
-        printf("There's changes that have to be commited first!\n");
+        printf("There are changes that have to be commited first!\n");
     }
 }
