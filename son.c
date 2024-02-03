@@ -82,6 +82,16 @@ int separator(char arg[], char sep[][1000])
     }
 }
 
+int line_separator(char lines[][1000], char file_address[])
+{
+    FILE *file = fopen(file_address, "r");
+    int index = 0;
+    while (fgets(lines[index], 1000, file) != NULL)
+        index++;
+    fclose(file);
+    return index;
+}
+
 int slash_separator(char arg[], char sep[][1000])
 {
     int count = 0;
@@ -676,6 +686,10 @@ int validInput(int argc, char *argv[])
     if (argc == 2 && strcmp(argv[1], "tag") == 0)
         return 1;
     if (argc == 4 && strcmp(argv[1], "tag") == 0 && strcmp(argv[2], "show") == 0)
+        return 1;
+    if (argc >= 5 && strcmp(argv[1], "diff") == 0 && strcmp(argv[2], "-f") == 0)
+        return 1;
+    if (argc == 5 && strcmp(argv[1], "diff") == 0 && strcmp(argv[2], "-c") == 0)
         return 1;
     return 0;
 }
@@ -1655,24 +1669,23 @@ int make_branch(char name[])
     return 0;
 }
 
-int find_head(int branchID)
+int find_head(int branchID, char address[])
 {
     char dot_son[1000];
     repoExists(dot_son);
-    DIR *son = opendir(dot_son);
-    struct dirent *dir;
-    int n, check_branch, max = 0;
-    while ((dir = readdir(son)) != NULL)
-    {
-        if (strstr(dir->d_name, "commit") != NULL && dir->d_type == 16)
-        {
-            sscanf(dir->d_name, "commit%d.%d", &n, &check_branch);
-            if (check_branch != branchID)
-                continue;
-            if (n > max)
-                max = n;
-        }
-    }
+    char br_name[1000];
+    sprintf(br_name, "branch%d.txt", branchID);
+    char br_address[1000];
+    strcpy(br_address, dot_son);
+    forward_one(br_address, br_name);
+    char line[1000];
+    FILE *br = fopen(br_address, "r");
+    while (fgets(line, 1000, br) != NULL)
+        if (*(line + strlen(line) - 1) == '\n')
+            *(line + strlen(line) - 1) = '\0';
+    strcpy(address, line);
+    int max;
+    sscanf(address, "commit%d.%d", &max, &branchID);
     return max;
 }
 
@@ -1688,8 +1701,9 @@ int check_if_head()
         *(cur_commit + strlen(cur_commit) - 1) = '\0';
     int n, branchID;
     sscanf(cur_commit, "commit%d.%d", &n, &branchID);
-    int head = find_head(branchID);
-    if (n == head)
+    char junk[1000];
+    int head = find_head(branchID, junk);
+    if (n == head + 1)
         return 1;
     else
         return 0;
@@ -1987,9 +2001,104 @@ int show_tag(char tag[])
     }
 }
 
+int null_space(char str[])
+{
+    for (int i = 0; i < strlen(str); i++)
+        if (*(str + i) != ' ' && *(str + i) != '\n')
+            return 0;
+    return 1;
+}
+
+int delete_null(char lines[][1000], int start, int end)
+{
+    int count = 0;
+    for (int i = start - 1; i < end; i++)
+    {
+        if (null_space(lines[i]) == 0)
+        {
+            strcpy(lines[count], lines[i]);
+            count++;
+        }
+    }
+    return count;
+}
+
+int line_number(char line[], char address[])
+{
+    FILE *file = fopen(address, "r");
+    char file_line[1000];
+    int count = 0;
+    while (fgets(file_line, 1000, file) != NULL)
+    {
+        count++;
+        if (*(file_line + strlen(file_line) - 1) == '\n')
+            if (null_space(file_line) == 0)
+                *(file_line + strlen(file_line) - 1) = '\0';
+        if (strcmp(line, file_line) == 0)
+            return count;
+    }
+    return -1;
+}
+
+int diff(char file1[], char file2[], int start1, int end1, int start2, int end2)
+{
+    char name1[1000], name2[1000];
+    strcpy(name1, file1);
+    last_maker(name1);
+    strcpy(name2, file2);
+    last_maker(name2);
+    char lines1[100][1000];
+    int count1 = line_separator(lines1, file1);
+    if (end1 == -1)
+        end1 = count1;
+    char lines2[100][1000];
+    int count2 = line_separator(lines2, file2);
+    if (end2 == -1)
+        end2 = count2;
+    int t1 = delete_null(lines1, start1, end1);
+    int t2 = delete_null(lines2, start2, end2);
+    int min = t1;
+    int diff_count = 0;
+    if (t2 < min)
+        min = t2;
+    for (int i = 0; i < min; i++)
+    {
+        if (*(lines1[i] + strlen(lines1[i]) - 1) == '\n')
+            *(lines1[i] + strlen(lines1[i]) - 1) = '\0';
+        if (*(lines2[i] + strlen(lines2[i]) - 1) == '\n')
+            *(lines2[i] + strlen(lines2[i]) - 1) = '\0';
+        if (strcmp(lines1[i], lines2[i]) != 0)
+        {
+            int th1 = line_number(lines1[i], file1);
+            int th2 = line_number(lines2[i], file2);
+            printf("====================================\n");
+            printf("file: %s - line: %d\n", name1, th1);
+            printf("%s\n", lines1[i]);
+            printf("file: %s - line: %d\n", name2, th2);
+            printf("%s\n", lines2[i]);
+            printf("====================================\n");
+            diff_count++;
+            // break;
+        }
+    }
+    if (diff_count == 0)
+    {
+        if (t1 == t2)
+        {
+            printf("There is no differences!\n");
+            return 0;
+        }
+        printf("One of the files has more lines than the other!\n");
+        return 1;
+    }
+    printf("%d differences found!\n", diff_count);
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
-    alphabetic_order("c:\\Users\\ASUS\\Desktop\\t\\.son\\commit4.1\\a.txt");
+    // diff("c:\\Users\\ASUS\\Desktop\\pcopy.txt", "c:\\Users\\ASUS\\Desktop\\sin.txt", 1, 2, 1, 2);
+    // printf("\033[35m some error \033[0m");
     // repo address
     char *repo_address = (char *)malloc(1000);
     repoExists(repo_address);
@@ -2617,11 +2726,11 @@ int main(int argc, char *argv[])
             }
             else if (argv[2][0] == 'H')
             {
-                int n = find_head(current_branch_ID);
+                char junk[1000];
+                int n = find_head(current_branch_ID, junk);
                 sprintf(commit_folder_name, "commit%d.%d", n, current_branch_ID);
                 sscanf(commit_folder_name, "commit%d.%d", &th, &branch);
-                printf("Successfully checked out to HEAD!\n");
-                return 0;
+                printf("(%d)(%d)", th, branch);
             }
             else
             {
@@ -2683,5 +2792,45 @@ int main(int argc, char *argv[])
             return 0;
         }
         tagfunc(argc, argv);
+    }
+    else if (strcmp(argv[1], "diff") == 0)
+    {
+        if (strcmp(argv[2], "-f") == 0)
+        {
+            char file1_address[1000], file2_address[1000];
+            strcpy(file1_address, argv[3]);
+            strcpy(file2_address, argv[4]);
+            address_converter(file1_address);
+            address_converter(file2_address);
+            char file1_name[1000], file2_name[1000];
+            strcpy(file1_name, file1_address);
+            strcpy(file2_name, file2_address);
+            last_maker(file1_name);
+            last_maker(file2_name);
+            char folder1[1000], folder2[1000];
+            strcpy(folder1, file1_address);
+            strcpy(folder2, file2_address);
+            back_one(folder1);
+            back_one(folder2);
+            if (alreadyExists(file1_name, folder1) == 0)
+            {
+                printf("\"%s\" doesn't exist!\n", file1_name);
+                return 1;
+            }
+            if (alreadyExists(file2_name, folder2) == 0)
+            {
+                printf("\"%s\" doesn't exist!\n", file2_name);
+                return 1;
+            }
+            int start1 = 1, start2 = 1, end1 = -1, end2 = -1;
+            for (int i = 5; i < argc - 1; i++)
+            {
+                if (strcmp(argv[i], "-line1") == 0)
+                    sscanf(argv[i + 1], "%d-%d", &start1, &end1);
+                if (strcmp(argv[i], "-line2") == 0)
+                    sscanf(argv[i + 1], "%d-%d", &start2, &end2);
+            }
+            diff(file1_address, file2_address, start1, end1, start2, end2);
+        }
     }
 }
