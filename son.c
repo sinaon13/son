@@ -3,6 +3,42 @@
 #include <dirent.h>
 #include <stdlib.h>
 #include <time.h>
+#include <windows.h> //only for coloring
+
+int printf_color(char str[], char color)
+{
+    HANDLE hConsole;
+    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (color == 'r')
+        SetConsoleTextAttribute(hConsole, 4);
+    else if (color == 'b')
+        SetConsoleTextAttribute(hConsole, 3);
+    else if (color == 'y')
+        SetConsoleTextAttribute(hConsole, 6);
+    else if (color == 'k')
+        SetConsoleTextAttribute(hConsole, 8);
+    else if (color == 'p')
+        SetConsoleTextAttribute(hConsole, 5);
+    else if (color == 'g')
+        SetConsoleTextAttribute(hConsole, 2);
+    else if (color == 'R')
+        SetConsoleTextAttribute(hConsole, 64);
+    else if (color == 'B')
+        SetConsoleTextAttribute(hConsole, 48);
+    else if (color == 'Y')
+        SetConsoleTextAttribute(hConsole, 96);
+    else if (color == 'G')
+        SetConsoleTextAttribute(hConsole, 32);
+    else if (color == 'K')
+        SetConsoleTextAttribute(hConsole, 128);
+    else if (color == 'P')
+        SetConsoleTextAttribute(hConsole, 208);
+    else if (color == 'W')
+        SetConsoleTextAttribute(hConsole, 240);
+    printf("%s", str);
+    SetConsoleTextAttribute(hConsole, 7);
+    return 0;
+}
 
 char current_branch[1000];
 char current_branch_name[1000];
@@ -525,7 +561,7 @@ int back_one(char address[])
 
 int copy_file(char file_name[], char org_address[], char copy_directory[], char check)
 {
-    if (strcmp(file_name, "commitInfo.txt") == 0 && check != 'y')
+    if ((strcmp(file_name, "tag.txt") == 0 || strcmp(file_name, "tags.txt") == 0 || strcmp(file_name, "commitInfo.txt") == 0) && check != 'y')
         return 1;
     char copy_address[1000];
     strcpy(copy_address, copy_directory);
@@ -690,6 +726,8 @@ int validInput(int argc, char *argv[])
     if (argc >= 5 && strcmp(argv[1], "diff") == 0 && strcmp(argv[2], "-f") == 0)
         return 1;
     if (argc == 5 && strcmp(argv[1], "diff") == 0 && strcmp(argv[2], "-c") == 0)
+        return 1;
+    if (argc == 5 && strcmp(argv[1], "merge") == 0 && strcmp(argv[2], "-b") == 0)
         return 1;
     return 0;
 }
@@ -2040,7 +2078,7 @@ int line_number(char line[], char address[])
     return -1;
 }
 
-int diff(char file1[], char file2[], int start1, int end1, int start2, int end2)
+int diff(char file1[], char file2[], int start1, int end1, int start2, int end2, char type)
 {
     char name1[1000], name2[1000];
     strcpy(name1, file1);
@@ -2071,34 +2109,182 @@ int diff(char file1[], char file2[], int start1, int end1, int start2, int end2)
         {
             int th1 = line_number(lines1[i], file1);
             int th2 = line_number(lines2[i], file2);
-            printf("====================================\n");
+            printf_color(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n", 'k');
             printf("file: %s - line: %d\n", name1, th1);
-            printf("%s\n", lines1[i]);
+            printf_color(lines1[i], 'y');
+            printf("\n");
             printf("file: %s - line: %d\n", name2, th2);
-            printf("%s\n", lines2[i]);
-            printf("====================================\n");
+            printf_color(lines2[i], 'r');
+            printf("\n");
+            printf_color("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n", 'k');
             diff_count++;
             // break;
         }
     }
     if (diff_count == 0)
     {
-        if (t1 == t2)
+        if (t1 == t2 && type == 'f')
         {
-            printf("There is no differences!\n");
+            printf_color("There is no differences!\n", 'g');
             return 0;
         }
-        printf("One of the files has more lines than the other!\n");
-        return 1;
+        else if (t1 != t2 && type == 'f')
+        {
+            printf_color("One of the files has more lines than the other!\n", 'r');
+            return 1;
+        }
+        else if (t1 != t2)
+        {
+            printf_color("** ", 'r');
+            printf("\"%s\", \"%s\" --> One of the files has more lines than the other!\n", name1, name2);
+            return 1;
+        }
     }
-    printf("%d differences found!\n", diff_count);
+    if (type == 'f')
+    {
+        printf("%d differences found!\n", diff_count);
+    }
     return 1;
+}
+
+int folder_diff(char folder1_address[], char folder2_address[])
+{
+    char items_in_folder1[100][1000];
+    char items_in_folder2[100][1000];
+    char items_type_1[100] = {-1};
+    char items_type_2[100] = {-1};
+    int count1 = 0, count2 = 0;
+    DIR *folder1 = opendir(folder1_address);
+    DIR *folder2 = opendir(folder2_address);
+    struct dirent *dir1;
+    struct dirent *dir2;
+    while ((dir1 = readdir(folder1)) != NULL)
+    {
+        if (strcmp(dir1->d_name, "tag.txt") == 0 || strcmp(dir1->d_name, "commitInfo.txt") == 0 || strcmp(dir1->d_name, ".") == 0 || strcmp(dir1->d_name, "..") == 0)
+            continue;
+        strcpy(items_in_folder1[count1], dir1->d_name);
+        items_type_1[count1] = dir1->d_type;
+        count1++;
+    }
+    while ((dir2 = readdir(folder2)) != NULL)
+    {
+        if (strcmp(dir2->d_name, "tag.txt") == 0 || strcmp(dir2->d_name, "commitInfo.txt") == 0 || strcmp(dir2->d_name, ".") == 0 || strcmp(dir2->d_name, "..") == 0)
+            continue;
+        strcpy(items_in_folder2[count2], dir2->d_name);
+        items_type_2[count2] = dir2->d_type;
+        count2++;
+    }
+    int flag;
+    int *found2 = (int *)calloc(count2, sizeof(int));
+    for (int i = 0; i < count1; i++)
+    {
+        flag = 0;
+        for (int j = 0; j < count2; j++)
+        {
+            if (strcmp(items_in_folder1[i], items_in_folder2[j]) == 0)
+            {
+                *(found2 + j) = 1;
+                flag = 1;
+                char f1_address[1000];
+                char f2_address[1000];
+                strcpy(f1_address, folder1_address);
+                forward_one(f1_address, items_in_folder1[i]);
+                strcpy(f2_address, folder2_address);
+                forward_one(f2_address, items_in_folder2[j]);
+                if (items_type_1[i] == 16)
+                    folder_diff(f1_address, f2_address);
+                else if (items_type_1[i] == 0)
+                    diff(f1_address, f2_address, 1, -1, 1, -1, 'F');
+            }
+        }
+        if (flag == 0)
+        {
+            printf_color("** ", 'r');
+            printf("\"%s\" doesn't have a corresponding item!\n", items_in_folder1[i]);
+        }
+    }
+    for (int i = 0; i < count2; i++)
+        if (*(found2 + i) == 0)
+        {
+            printf_color("** ", 'r');
+            printf("\"%s\" doesn't have a corresponding item!\n", items_in_folder2[i]);
+        }
+    free(found2);
+    return 0;
+}
+
+int merge_folder_diff(char folder1_address[], char folder2_address[], int *list)
+{
+    char temp[1000];
+    char items_in_folder1[100][1000];
+    char items_in_folder2[100][1000];
+    char items_type_1[100] = {-1};
+    char items_type_2[100] = {-1};
+    int count1 = 0, count2 = 0;
+    DIR *folder1 = opendir(folder1_address);
+    DIR *folder2 = opendir(folder2_address);
+    struct dirent *dir1;
+    struct dirent *dir2;
+    while ((dir1 = readdir(folder1)) != NULL)
+    {
+        if (strcmp(dir1->d_name, "tag.txt") == 0 || strcmp(dir1->d_name, "commitInfo.txt") == 0 || strcmp(dir1->d_name, ".") == 0 || strcmp(dir1->d_name, "..") == 0)
+            continue;
+        strcpy(items_in_folder1[count1], dir1->d_name);
+        items_type_1[count1] = dir1->d_type;
+        count1++;
+    }
+    while ((dir2 = readdir(folder2)) != NULL)
+    {
+        if (strcmp(dir2->d_name, "tag.txt") == 0 || strcmp(dir2->d_name, "commitInfo.txt") == 0 || strcmp(dir2->d_name, ".") == 0 || strcmp(dir2->d_name, "..") == 0)
+            continue;
+        strcpy(items_in_folder2[count2], dir2->d_name);
+        items_type_2[count2] = dir2->d_type;
+        count2++;
+    }
+
+    int flag;
+    int *found2 = (int *)calloc(count2, sizeof(int));
+    for (int i = 0; i < count1; i++)
+    {
+        flag = 0;
+        for (int j = 0; j < count2; j++)
+        {
+            if (strcmp(items_in_folder1[i], items_in_folder2[j]) == 0)
+            {
+                *(found2 + j) = 1;
+                flag = 1;
+                char f1_address[1000];
+                char f2_address[1000];
+                strcpy(f1_address, folder1_address);
+                forward_one(f1_address, items_in_folder1[i]);
+                strcpy(f2_address, folder2_address);
+                forward_one(f2_address, items_in_folder2[j]);
+                if (items_type_1[i] == 16)
+                    folder_diff(f1_address, f2_address);
+                // else if (items_type_1[i] == 0)
+                // diff(f1_address, f2_address, 1, -1, 1, -1);
+            }
+        }
+        if (flag == 0)
+        {
+            sprintf(temp, "\"%s\"", items_in_folder1[i]);
+            strcat(temp, " doesn't have a corresponding item!\n");
+            printf_color(temp, 'r');
+        }
+    }
+    for (int i = 0; i < count2; i++)
+        if (*(found2 + i) == 0)
+        {
+            sprintf(temp, "\"%s\"", items_in_folder2[i]);
+            strcat(temp, " doesn't have a corresponding item!\n");
+            printf(temp, 'r');
+        }
+    free(found2);
 }
 
 int main(int argc, char *argv[])
 {
     // diff("c:\\Users\\ASUS\\Desktop\\pcopy.txt", "c:\\Users\\ASUS\\Desktop\\sin.txt", 1, 2, 1, 2);
-    // printf("\033[35m some error \033[0m");
     // repo address
     char *repo_address = (char *)malloc(1000);
     repoExists(repo_address);
@@ -2443,6 +2629,7 @@ int main(int argc, char *argv[])
         int stg, added, delete;
         int M, A, D;
         char org_to_commit[1000];
+        int count = 0;
         while ((dir = readdir(currDir)) != NULL)
         {
             if (dir->d_type != 0 || strcmp(dir->d_name, "commitInfo.txt") == 0)
@@ -2458,11 +2645,13 @@ int main(int argc, char *argv[])
                 if (check == 1)
                 {
                     printf("    %s --> -M\n", dir->d_name);
+                    count++;
                     continue;
                 }
                 if (check == 3)
                 {
                     printf("    %s --> -A\n", dir->d_name);
+                    count++;
                     continue;
                 }
                 if (check == 0)
@@ -2476,17 +2665,20 @@ int main(int argc, char *argv[])
                     if (added == 0)
                     {
                         printf("    %s --> +A\n", dir->d_name);
+                        count++;
                         continue;
                     }
                     check = file_changed(org_f_address, org_to_commit);
                     if (check == 0)
                     {
                         printf("    %s --> +0\n", dir->d_name);
+                        count++;
                         continue;
                     }
                     else if (check == 1)
                     {
                         printf("    %s --> +M\n", dir->d_name);
+                        count++;
                         continue;
                     }
                 }
@@ -2508,6 +2700,7 @@ int main(int argc, char *argv[])
             if (delete == 0)
             {
                 printf("    %s --> -D\n", commit_dir->d_name);
+                count++;
                 continue;
             }
         }
@@ -2531,6 +2724,9 @@ int main(int argc, char *argv[])
         //         continue;
         //     }
         // }
+        if (count == 0)
+            printf("Every item is untracked!\n");
+        return 0;
     }
     else if (strcmp(argv[1], "commit") == 0)
     {
@@ -2830,7 +3026,25 @@ int main(int argc, char *argv[])
                 if (strcmp(argv[i], "-line2") == 0)
                     sscanf(argv[i + 1], "%d-%d", &start2, &end2);
             }
-            diff(file1_address, file2_address, start1, end1, start2, end2);
+            diff(file1_address, file2_address, start1, end1, start2, end2, 'f');
+        }
+
+        else if (strcmp(argv[2], "-c") == 0)
+        {
+            int ID1, ID2;
+            sscanf(argv[3], "%d", &ID1);
+            sscanf(argv[4], "%d", &ID2);
+            char name1[1000], name2[1000];
+            char address_1[1000], address_2[1000];
+            commit_ID_to_number_dot_number(ID1, name1);
+            commit_ID_to_number_dot_number(ID2, name2);
+            repoExists(address_1);
+            repoExists(address_2);
+            forward_one(address_1, name1);
+            forward_one(address_2, name2);
+            folder_diff(address_1, address_2);
+            return 0;
         }
     }
+    // else if(strcmp(argv[i]))
 }
