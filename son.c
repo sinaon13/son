@@ -40,6 +40,47 @@ int printf_color(char str[], char color)
     return 0;
 }
 
+int change_color(char color)
+{
+    HANDLE hConsole;
+    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (color == 'r')
+        SetConsoleTextAttribute(hConsole, 4);
+    else if (color == 'b')
+        SetConsoleTextAttribute(hConsole, 3);
+    else if (color == 'y')
+        SetConsoleTextAttribute(hConsole, 6);
+    else if (color == 'k')
+        SetConsoleTextAttribute(hConsole, 8);
+    else if (color == 'p')
+        SetConsoleTextAttribute(hConsole, 5);
+    else if (color == 'g')
+        SetConsoleTextAttribute(hConsole, 2);
+    else if (color == 'R')
+        SetConsoleTextAttribute(hConsole, 64);
+    else if (color == 'B')
+        SetConsoleTextAttribute(hConsole, 48);
+    else if (color == 'Y')
+        SetConsoleTextAttribute(hConsole, 96);
+    else if (color == 'G')
+        SetConsoleTextAttribute(hConsole, 32);
+    else if (color == 'K')
+        SetConsoleTextAttribute(hConsole, 128);
+    else if (color == 'P')
+        SetConsoleTextAttribute(hConsole, 208);
+    else if (color == 'W')
+        SetConsoleTextAttribute(hConsole, 240);
+    return 0;
+}
+
+int reset_color()
+{
+    HANDLE hConsole;
+    hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, 7);
+    return 0;
+}
+
 char current_branch[1000];
 char current_branch_name[1000];
 int current_branch_ID;
@@ -307,7 +348,12 @@ int shortcut_write(int argc, char *argv[])
     strcpy(wd + strlen(wd), "\\shortcut.txt");
     FILE *shortcut = fopen(wd, "a");
     fprintf(shortcut, "%s %s\n", argv[5], argv[3]);
-    printf("\"%s\" is now a shortcut-message for \"%s\".", argv[5], argv[3]);
+    change_color('G');
+    printf("\"%s\"", argv[5]);
+    printf_color(" is now a shortcut-message for .", 'g');
+    change_color('G');
+    printf("\"%s\"", argv[3]);
+    reset_color();
     fclose(shortcut);
     return 0;
 }
@@ -473,8 +519,11 @@ int alias_replace(int argc, char *argv[])
                 separator(global_als_list[j][1], sep);
                 for (int k = argc - 1; k > i; k--)
                 {
-                    argv[k + n - 1] = (char *)malloc(1000);
-                    strcpy(argv[k + n - 1], argv[k]);
+                    if (k + n - 1 != k)
+                    {
+                        argv[k + n - 1] = (char *)malloc(1000);
+                        strcpy(argv[k + n - 1], argv[k]);
+                    }
                 }
                 for (int k = i; k < n + i; k++)
                 {
@@ -500,8 +549,11 @@ int alias_replace(int argc, char *argv[])
                 separator(als_list[j][1], sep);
                 for (int k = argc - 1; k > i; k--)
                 {
-                    argv[k + n - 1] = (char *)malloc(1000);
-                    strcpy(argv[k + n - 1], argv[k]);
+                    if (k + n - 1 != k)
+                    {
+                        argv[k + n - 1] = (char *)malloc(1000);
+                        strcpy(argv[k + n - 1], argv[k]);
+                    }
                 }
                 for (int k = i; k < n + i; k++)
                 {
@@ -686,6 +738,8 @@ int validInput(int argc, char *argv[])
     if (argc == 4 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-n") == 0)
         return 1;
     if (argc == 3 && strcmp(argv[1], "add") == 0 && strcmp(argv[2], "-redo") == 0)
+        return 1;
+    if (argc == 3 && strcmp(argv[1], "reset") == 0)
         return 1;
     if (argc == 2 && strcmp(argv[1], "status") == 0)
         return 1;
@@ -960,6 +1014,12 @@ int makeRepo()
     char cwd[1000];
     getcwd(cwd, 1000);
     mkdir(".son");
+    char hide[1000];
+    strcpy(hide, "attrib +h ");
+    strcat(hide, cwd);
+    forward_one(hide, ".son");
+    printf("(%s)", hide);
+    system(hide);
     char master_branch[1000];
     getcwd(master_branch, 1000);
     forward_one(master_branch, ".son");
@@ -1169,11 +1229,9 @@ int commit_to_repo(char address[])
         }
         t++;
     }
-    char temp[1000];
-    if (*(t + 1) == '\0')
+    if (*(t + 1) != '\0')
     {
-        strcpy(temp, t + 1);
-        strcpy(c - 5, temp);
+        strcpy(c - 5, t + 1);
     }
     return 0;
 }
@@ -1325,13 +1383,15 @@ int commitfunc(char *argv3)
         FILE *info = fopen(commit_info_file, "w");
         fprintf(info, "%d\n%s\n%s\n%s\n%s\n%d\n%d", commitID, argv3, name, time_str, current_branch_name, current_branch_ID, count);
         printf("'''''''''''''''''''''''''''''''''''\n");
-        printf("Succsessful!\n\n");
+        printf_color("Succsessful!\n\n", 'g');
+        change_color('b');
         printf("Commit ID --> %d\n\n", commitID);
         printf("Commit message --> %s\n\n", argv3);
         printf("Username --> %s\n\n", name);
         printf("Time --> %s\n\n", time_str);
         printf("branch --> %s (branchId: %d)\n\n", current_branch_name, current_branch_ID);
         printf("Commited files/folders count --> %d\n\n", count);
+        reset_color();
         printf("'''''''''''''''''''''''''''''''''''");
         fclose(info);
         back_one(dot_son);
@@ -1652,12 +1712,14 @@ int log_n_with_search(int n, char word[])
     if (word_exists(word, message) == 0)
         return 1;
     printf("'''''''''''''''''''''''''''''''''''\n");
+    change_color('b');
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
     printf("Username --> %s\n\n", username);
     printf("Time --> %s\n\n", time);
     printf("Branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
+    reset_color();
     printf("'''''''''''''''''''''''''''''''''''");
     return 0;
 }
@@ -2213,9 +2275,65 @@ int folder_diff(char folder1_address[], char folder2_address[])
     return 0;
 }
 
-int merge_folder_diff(char folder1_address[], char folder2_address[], int *list)
+int merge_diff(char file1[], char file2[], int start1, int end1, int start2, int end2)
 {
-    char temp[1000];
+    char name1[1000], name2[1000];
+    strcpy(name1, file1);
+    last_maker(name1);
+    strcpy(name2, file2);
+    last_maker(name2);
+    char lines1[100][1000];
+    int count1 = line_separator(lines1, file1);
+    if (end1 == -1)
+        end1 = count1;
+    char lines2[100][1000];
+    int count2 = line_separator(lines2, file2);
+    if (end2 == -1)
+        end2 = count2;
+    int t1 = delete_null(lines1, start1, end1);
+    int t2 = delete_null(lines2, start2, end2);
+    int min = t1;
+    int diff_count = 0;
+    if (t2 < min)
+        min = t2;
+    for (int i = 0; i < min; i++)
+    {
+        if (*(lines1[i] + strlen(lines1[i]) - 1) == '\n')
+            *(lines1[i] + strlen(lines1[i]) - 1) = '\0';
+        if (*(lines2[i] + strlen(lines2[i]) - 1) == '\n')
+            *(lines2[i] + strlen(lines2[i]) - 1) = '\0';
+        if (strcmp(lines1[i], lines2[i]) != 0)
+        {
+            int th1 = line_number(lines1[i], file1);
+            int th2 = line_number(lines2[i], file2);
+            printf_color(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n", 'k');
+            printf("file: %s - line: %d\n", name1, th1);
+            printf_color(lines1[i], 'y');
+            printf("\n");
+            printf("file: %s - line: %d\n", name2, th2);
+            printf_color(lines2[i], 'r');
+            printf("\n");
+            printf_color("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n", 'k');
+            diff_count++;
+            // break;
+        }
+    }
+    if (diff_count == 0)
+    {
+        if (t1 == t2)
+            return 0;
+        else if (t1 != t2)
+        {
+            printf_color("** ", 'r');
+            printf("\"%s\", \"%s\" --> One of the files has more lines than the other!\n", name1, name2);
+            return 1;
+        }
+    }
+    return 1;
+}
+
+int merge_folder_diff(char folder1_address[], char folder2_address[])
+{
     char items_in_folder1[100][1000];
     char items_in_folder2[100][1000];
     char items_type_1[100] = {-1};
@@ -2241,18 +2359,13 @@ int merge_folder_diff(char folder1_address[], char folder2_address[], int *list)
         items_type_2[count2] = dir2->d_type;
         count2++;
     }
-
-    int flag;
-    int *found2 = (int *)calloc(count2, sizeof(int));
+    int flag = 0;
     for (int i = 0; i < count1; i++)
     {
-        flag = 0;
         for (int j = 0; j < count2; j++)
         {
             if (strcmp(items_in_folder1[i], items_in_folder2[j]) == 0)
             {
-                *(found2 + j) = 1;
-                flag = 1;
                 char f1_address[1000];
                 char f2_address[1000];
                 strcpy(f1_address, folder1_address);
@@ -2260,26 +2373,16 @@ int merge_folder_diff(char folder1_address[], char folder2_address[], int *list)
                 strcpy(f2_address, folder2_address);
                 forward_one(f2_address, items_in_folder2[j]);
                 if (items_type_1[i] == 16)
-                    folder_diff(f1_address, f2_address);
-                // else if (items_type_1[i] == 0)
-                // diff(f1_address, f2_address, 1, -1, 1, -1);
+                    merge_folder_diff(f1_address, f2_address);
+                else if (items_type_1[i] == 0)
+                    if (merge_diff(f1_address, f2_address, 1, -1, 1, -1) == 1)
+                        flag = 1;
             }
         }
-        if (flag == 0)
-        {
-            sprintf(temp, "\"%s\"", items_in_folder1[i]);
-            strcat(temp, " doesn't have a corresponding item!\n");
-            printf_color(temp, 'r');
-        }
     }
-    for (int i = 0; i < count2; i++)
-        if (*(found2 + i) == 0)
-        {
-            sprintf(temp, "\"%s\"", items_in_folder2[i]);
-            strcat(temp, " doesn't have a corresponding item!\n");
-            printf(temp, 'r');
-        }
-    free(found2);
+    if (flag == 1)
+        return 1;
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -2427,7 +2530,10 @@ int main(int argc, char *argv[])
                     char type = type_of(name, folder_address);
                     if (alreadyExists(name, folder_address) == 0)
                     {
-                        printf("** %s doesn't seem to exist!\n", name);
+                        change_color('Y');
+                        printf("\"%s\"", name);
+                        reset_color();
+                        printf_color(" doesn't seem to exist!\n", 'y');
                         count++;
                         continue;
                     }
@@ -2543,7 +2649,9 @@ int main(int argc, char *argv[])
                 char type = type_of(name, folder_address);
                 if (alreadyExists(name, folder_address) == 0)
                 {
-                    printf("** %s doesn't seem to exist!\n", name);
+                    printf_color("** ", 'y');
+                    printf("%s", name);
+                    printf_color(" doesn't seem to exist!\n", 'y');
                     return 1;
                 }
                 char cur_commit_folder[1000];
@@ -2564,7 +2672,6 @@ int main(int argc, char *argv[])
                 else if (type == 'f')
                 {
                     copy_file(name, argv[2], cur_commit_folder, 'n');
-                    printf("(%s)(%s)(%s)", name, argv[2], cur_commit_folder);
                     if (line_exists(added_address, argv[2]) == 0)
                         fprintf(added, "%s\n", argv[2]);
                 }
@@ -2607,10 +2714,14 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-            printf("Succsessfully added to staging area.\n");
+            printf_color("** Succsessfully added to staging area.\n", 'g');
             fclose(added);
         }
         return 0;
+    }
+    else if (strcmp(argv[1], "reset") == 0)
+    {
+        // commit_to_repo()
     }
     else if (strcmp(argv[1], "status") == 0)
     {
@@ -2749,12 +2860,12 @@ int main(int argc, char *argv[])
         }
         if (strlen(argv[3]) > 72)
         {
-            printf("Commit message is too long! Try again with a message shorter than 73 characters.\n");
+            printf_color("Commit message is too long! Try again with a message shorter than 73 characters.\n", 'r');
             return 1;
         }
         if (argc == 3)
         {
-            printf("Commit message is empty!\n");
+            printf_color("Commit message is empty!\n", 'r');
             return 1;
         }
         commitfunc(argv[3]);
@@ -2764,7 +2875,7 @@ int main(int argc, char *argv[])
     {
         if (argc != 6)
         {
-            printf("The last arg(shortcut-name) is empty!\n");
+            printf_color("The last arg(shortcut-name) is empty!\n", 'r');
             return 1;
         }
         char line[1000];
@@ -2776,7 +2887,7 @@ int main(int argc, char *argv[])
         forward_one(address, "shortcut.txt");
         if (line_exists(address, line) == 1)
         {
-            printf("Shortcut already exists! Use the 'replace' command to change it.\n");
+            printf_color("Shortcut already exists! Use the 'replace' command to change it.\n", 'y');
             exit(1);
         }
         shortcut_write(argc, argv);
@@ -2786,7 +2897,10 @@ int main(int argc, char *argv[])
     {
         if (shortcut_replace(argc, argv) == 1)
         {
-            printf("\"%s\" doesn't exist!\n", argv[5]);
+            change_color('R');
+            printf("\"%s\"", argv[5]);
+            reset_color();
+            printf_color(" doesn't exist!\n", 'r');
             exit(1);
         }
         printf("\"%s\" was replaced and now is a shortcut for \"%s\".\n", argv[5], argv[3]);
@@ -2795,10 +2909,16 @@ int main(int argc, char *argv[])
     {
         if (shortcut_remove(argc, argv) == 1)
         {
-            printf("\"%s\" doesn't exist!\n", argv[3]);
+            change_color('Y');
+            printf("\"%s\"", argv[3]);
+            reset_color();
+            printf_color(" doesn't exist!\n", 'y');
             exit(1);
         }
-        printf("\"%s\" was successfully removed!\n", argv[3]);
+        change_color('G');
+        printf("\"%s\"", argv[3]);
+        reset_color();
+        printf_color(" was successfully removed!\n", 'g');
     }
     else if (strcmp(argv[1], "log") == 0)
     {
@@ -2865,7 +2985,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            printf("\nbranch list:\n\n");
+            printf_color("\nbranch list:\n\n", 'p');
             char dot_son[1000];
             repoExists(dot_son);
             DIR *son = opendir(dot_son);
@@ -2882,7 +3002,9 @@ int main(int argc, char *argv[])
                     fgets(br_name, 1000, br);
                     if (*(br_name + strlen(br_name) - 1) == '\n')
                         *(br_name + strlen(br_name) - 1) = '\0';
+                    change_color('p');
                     printf("    --> %s\n", br_name);
+                    reset_color();
                 }
             }
             return 0;
@@ -2916,7 +3038,7 @@ int main(int argc, char *argv[])
                     sscanf(commit_folder_name, "commit%d.%d", &th, &branch);
                 else
                 {
-                    printf("No commit exists with the given ID!\n");
+                    printf_color("No commit exists with the given ID!\n", 'r');
                     return 1;
                 }
             }
@@ -2926,7 +3048,6 @@ int main(int argc, char *argv[])
                 int n = find_head(current_branch_ID, junk);
                 sprintf(commit_folder_name, "commit%d.%d", n, current_branch_ID);
                 sscanf(commit_folder_name, "commit%d.%d", &th, &branch);
-                printf("(%d)(%d)", th, branch);
             }
             else
             {
@@ -2934,7 +3055,7 @@ int main(int argc, char *argv[])
                     sscanf(commit_folder_name, "commit%d.%d", &th, &branch);
                 else
                 {
-                    printf("Branch doesn't exist!\n");
+                    printf_color("Branch doesn't exist!\n", 'r');
                     return 1;
                 }
             }
@@ -2956,10 +3077,10 @@ int main(int argc, char *argv[])
             repoExists(commit_folder_address);
             forward_one(commit_folder_address, commit_folder_name);
             copy_n_commit_to_repo(commit_folder_address);
-            printf("Successfully checked out!\n");
+            printf_color("Successfully checked out!\n", 'g');
             return 0;
         }
-        printf("There are changes that have to be commited first!\n");
+        printf_color("There are changes that have to be commited first!\n", 'y');
     }
     else if (strcmp(argv[1], "tag") == 0)
     {
@@ -3010,11 +3131,13 @@ int main(int argc, char *argv[])
             back_one(folder2);
             if (alreadyExists(file1_name, folder1) == 0)
             {
+                printf_color("**** ", 'r');
                 printf("\"%s\" doesn't exist!\n", file1_name);
                 return 1;
             }
             if (alreadyExists(file2_name, folder2) == 0)
             {
+                printf_color("**** ", 'r');
                 printf("\"%s\" doesn't exist!\n", file2_name);
                 return 1;
             }
@@ -3046,5 +3169,70 @@ int main(int argc, char *argv[])
             return 0;
         }
     }
-    // else if(strcmp(argv[i]))
+    else if (strcmp(argv[1], "merge") == 0)
+    {
+        if (strcmp(argv[2], "-b") == 0)
+        {
+            char br1[1000], br2[1000];
+            strcpy(br1, argv[3]);
+            strcpy(br2, argv[4]);
+            char commit1[1000], commit2[1000];
+            branch_name_to_number_dot_number(br1, commit1);
+            branch_name_to_number_dot_number(br2, commit2);
+            char cm1_address[1000], cm2_address[1000];
+            repoExists(cm1_address);
+            repoExists(cm2_address);
+            forward_one(cm1_address, commit1);
+            forward_one(cm2_address, commit2);
+            if (merge_folder_diff(cm1_address, cm2_address) == 0)
+            {
+                char added_file[1000];
+                repoExists(added_file);
+                forward_one(added_file, "added.txt");
+                FILE *added = fopen(added_file, "r");
+                char line[1000];
+                int flag = 0;
+                while (fgets(line, 1000, added) != NULL)
+                {
+                    flag = 1;
+                    if (strcmp(line, "\n") == 0)
+                    {
+                        flag = 0;
+                        break;
+                    }
+                }
+                if (flag == 0)
+                {
+                    int ID, th, branch;
+                    char cm_dest[1000];
+                    sscanf(commit1, "commit%d.%d", &th, &branch);
+                    sprintf(cm_dest, "commit%d.%d", th + 1, branch);
+                    char current_branch_address[1000];
+                    repoExists(current_branch_address);
+                    forward_one(current_branch_address, "curr_branch.txt");
+                    FILE *cur_br = fopen(current_branch_address, "w");
+                    fprintf(cur_br, "branch%d.txt", current_branch_ID);
+                    fclose(cur_br);
+
+                    char current_commit_address[1000];
+                    repoExists(current_commit_address);
+                    forward_one(current_commit_address, "curr_commit.txt");
+                    FILE *cur_cm = fopen(current_commit_address, "w");
+                    fprintf(cur_cm, "commit%d.%d", th + 2, branch);
+                    fclose(cur_cm);
+
+                    char dest[1000];
+                    repoExists(dest);
+                    copy_folder(cm_dest, cm1_address, dest);
+                    copy_folder(cm_dest, cm2_address, dest);
+
+                    commit_n_folder(th + 2);
+
+                    printf_color("Successfully merged!\n", 'g');
+                    return 0;
+                }
+                printf_color("There are changes that have to be commited first!\n", 'r');
+            }
+        }
+    }
 }
