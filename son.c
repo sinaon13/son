@@ -5,6 +5,8 @@
 #include <time.h>
 #include <windows.h> //only for coloring
 
+char hooks[100][1000];
+
 int printf_color(char str[], char color)
 {
     HANDLE hConsole;
@@ -800,6 +802,14 @@ int validInput(int argc, char *argv[])
         return 1;
     if (argc == 5 && strcmp(argv[1], "merge") == 0 && strcmp(argv[2], "-b") == 0)
         return 1;
+    if (argc <= 5 && argc >= 3 && strcmp(argv[1], "revert") == 0)
+        return 1;
+    if (argc <= 4 && argc >= 3 && strcmp(argv[1], "revert") == 0)
+        return 1;
+    if (argc <= 9 && argc >= 6 && strcmp(argv[1], "grep") == 0)
+        return 1;
+    if (argc >= 2 && argc <= 5 && strcmp(argv[1], "pre-commit") == 0)
+        return 1;
     return 0;
 }
 
@@ -1080,6 +1090,16 @@ int makeRepo()
     FILE *commitInfo = fopen(cmInfo, "w");
     fprintf(commitInfo, "1000\n");
     fclose(commitInfo);
+    char pre[1000];
+    strcpy(pre, cwd);
+    forward_one(pre, ".son");
+    forward_one(pre, "pre.txt");
+    FILE *pre_commit = fopen(pre, "w");
+    fclose(pre_commit);
+    back_one(pre);
+    forward_one(pre, "app.txt");
+    FILE *applied = fopen(pre, "w");
+    fclose(applied);
     DIR *currentDir = opendir(".");
     struct dirent *dir;
     while ((dir = readdir(currentDir)) != NULL)
@@ -1272,7 +1292,7 @@ int username_read(char username[])
     }
     else
     {
-        printf("You haven't set any usernames yet!\n");
+        printf_color("You haven't set any usernames yet!\n", 'Y');
         return 1;
     }
     if (*(username + strlen(username) - 1) == '\n')
@@ -1447,7 +1467,7 @@ int commitfunc(char *argv3)
     }
     else
     {
-        printf("No changes have been made since the last commit.\n");
+        printf_color("No changes have been made since the last commit.\n", 'y');
         exit(1);
     }
 }
@@ -1522,12 +1542,14 @@ int log_n(int n)
     fgets(line, 1000, info);
     sscanf(line, "%d", &count);
     printf("'''''''''''''''''''''''''''''''''''\n");
+    change_color('b');
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
     printf("Username --> %s\n\n", username);
     printf("Time --> %s\n\n", time);
     printf("branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
+    reset_color();
     printf("'''''''''''''''''''''''''''''''''''");
 }
 
@@ -1574,6 +1596,7 @@ int log_n_with_author(int n, char author[])
     if (strcmp(username, author) != 0)
         return 1;
     printf("'''''''''''''''''''''''''''''''''''\n");
+    change_color('b');
     printf("Succsessful!\n\n");
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
@@ -1581,6 +1604,7 @@ int log_n_with_author(int n, char author[])
     printf("Time --> %s\n\n", time);
     printf("Branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
+    reset_color();
     printf("'''''''''''''''''''''''''''''''''''");
     return 0;
 }
@@ -1680,6 +1704,7 @@ int log_n_with_time(int n, char which[], char given_time[])
             return 1;
     }
     printf("'''''''''''''''''''''''''''''''''''\n");
+    change_color('b');
     printf("Succsessful!\n\n");
     printf("Commit ID --> %d\n\n", ID);
     printf("Commit message --> %s\n\n", message);
@@ -1687,6 +1712,7 @@ int log_n_with_time(int n, char which[], char given_time[])
     printf("Time --> %s\n\n", time);
     printf("Branch --> %s (branchID: %d)\n\n", branch_name, branchID);
     printf("Commited files/folders count --> %d\n\n", count);
+    reset_color();
     printf("'''''''''''''''''''''''''''''''''''");
     return 0;
 }
@@ -1829,7 +1855,7 @@ int check_if_head()
     sscanf(cur_commit, "commit%d.%d", &n, &branchID);
     char junk[1000];
     int head = find_head(branchID, junk);
-    printf("(%d - %d)", n, head + 1);
+    // printf("(%d)(%d)", n, head + 1);
     if (n == head + 1)
         return 1;
     else
@@ -1962,7 +1988,7 @@ int tagfunc(int argc, char *argv[])
         }
         if (flag == 0)
         {
-            printf("Tag already exists!\nIn order to overwrite use the '-f' argument\n");
+            printf_color("Tag already exists!\nIn order to overwrite use the '-f' argument\n", 'r');
             exit(1);
         }
         else
@@ -2072,7 +2098,7 @@ int tagfunc(int argc, char *argv[])
             fprintf(tag_file, "(null)");
     }
     fclose(tag_file);
-    printf("Successfully done!\n");
+    printf_color("Successfully done!\n", 'g');
     strcat(tag, "\n");
     append_line_at_top(tag, tags_file_address);
 }
@@ -2114,6 +2140,7 @@ int show_tag(char tag[])
                 if (*(message + strlen(message) - 1) == '\n')
                     *(message + strlen(message) - 1) = '\0';
                 printf("=============================================\n");
+                change_color('b');
                 printf("Tag --> %s\n\n", tag);
                 printf("CommitID --> %s\n\n", commitID);
                 printf("Username --> %s\n\n", username);
@@ -2122,6 +2149,7 @@ int show_tag(char tag[])
                     printf("Message --> Not specified by the user!\n\n");
                 else
                     printf("Message --> %s\n\n", message);
+                reset_color();
                 printf("=============================================\n");
             }
         }
@@ -2131,7 +2159,7 @@ int show_tag(char tag[])
 int null_space(char str[])
 {
     for (int i = 0; i < strlen(str); i++)
-        if (*(str + i) != ' ' && *(str + i) != '\n')
+        if (*(str + i) != ' ' && *(str + i) != '\n' && *(str + i) != '\r' && *(str + i) != '\t')
             return 0;
     return 1;
 }
@@ -2471,8 +2499,99 @@ int branch_exists(char branch[])
     return 0;
 }
 
+int grep_file(char word[], char file_address[], int *line_numbers)
+{
+    char lines[100][1000];
+    int line_count = line_separator(lines, file_address);
+    char *c;
+    int index = 0;
+    for (int i = 0; i < line_count; i++)
+    {
+        if ((c = strstr(lines[i], word)) != NULL)
+        {
+            if (c - lines[i] == 0)
+            {
+                if (*(c + strlen(word)) == '\n' || *(c + strlen(word)) == ' ' || *(c + strlen(word)) == '\r' || *(c + strlen(word)) == '\t')
+                {
+                    *(line_numbers + index) = i + 1;
+                    index++;
+                }
+                else if ((c - lines[i]) + strlen(word) == strlen(lines[i]))
+                {
+                    *(line_numbers + index) = i + 1;
+                    index++;
+                }
+            }
+            else if ((c - lines[i]) + strlen(word) == strlen(lines[i]))
+            {
+                if (*(c - 1) == '\n' || *(c - 1) == ' ' || *(c - 1) == '\r' || *(c - 1) == '\t')
+                {
+                    *(line_numbers + index) = i + 1;
+                    index++;
+                }
+                else if (c - lines[i] == 0)
+                {
+                    *(line_numbers + index) = i + 1;
+                    index++;
+                }
+            }
+            else if (*(c - 1) == '\n' || *(c - 1) == ' ' || *(c - 1) == '\r' || *(c - 1) == '\t')
+                if (*(c + strlen(word)) == '\n' || *(c + strlen(word)) == ' ' || *(c + strlen(word)) == '\r' || *(c + strlen(word)) == '\t')
+                {
+                    *(line_numbers + index) = i + 1;
+                    index++;
+                }
+        }
+    }
+    return index;
+}
+
+int eof_null(char file_address[])
+{
+    FILE *file = fopen(file_address, "r");
+    char line[1000], temp[1000];
+    while (fgets(temp, 1000, file) != NULL)
+        strcpy(line, temp);
+    if (*(line + strlen(line) - 1) == '\n' || *(line + strlen(line) - 1) == ' ' || *(line + strlen(line) - 1) == '\r' || *(line + strlen(line) - 1) == '\t')
+        return 1;
+    return 0;
+}
+
+int split_dot(char str[])
+{
+    for (int i = strlen(str) - 1; i >= 0; i--)
+    {
+        if (*(str + i) == '.')
+        {
+            strcpy(str, str + i + 1);
+        }
+    }
+    return 0;
+}
+
+int format_check(char address[])
+{
+    char format[1000];
+    strcpy(format, address);
+    split_dot(format);
+    if (strcmp(format, "cpp") == 0)
+        return 0;
+    if (strcmp(format, "c") == 0)
+        return 0;
+    if (strcmp(format, "mp3") == 0)
+        return 0;
+    if (strcmp(format, "mp4") == 0)
+        return 0;
+    if (strcmp(format, "wav") == 0)
+        return 0;
+    if (strcmp(format, "txt") == 0)
+        return 0;
+    return 1;
+}
+
 int main(int argc, char *argv[])
 {
+    // printf("%d", eof_null(temp));
     // diff("c:\\Users\\ASUS\\Desktop\\pcopy.txt", "c:\\Users\\ASUS\\Desktop\\sin.txt", 1, 2, 1, 2);
     // repo address
     char *repo_address = (char *)malloc(1000);
@@ -2480,7 +2599,7 @@ int main(int argc, char *argv[])
     // repo check
     if (*repo_address == '\0' && (strcmp(argv[1], "init") != 0 || argc != 2))
     {
-        printf("No repo found!\n");
+        printf_color("No repo found!\n", 'R');
         return 1;
     }
     // alias read
@@ -2501,6 +2620,20 @@ int main(int argc, char *argv[])
         else
             printf("Repo already exists!\n");
         return 0;
+    }
+    // hooks
+    char pre_file[1000];
+    repoExists(pre_file);
+    forward_one(pre_file, "pre.txt");
+    FILE *p_file = fopen(pre_file, "r");
+    char line[1000];
+    int ind = 0;
+    while (fgets(line, 1000, p_file) != NULL)
+    {
+        if (*(line + strlen(line) - 1) == '\n')
+            *(line + strlen(line) - 1) = '\0';
+        strcpy(hooks[ind], line);
+        ind++;
     }
     // curr_branch
     char dot[1000];
@@ -2754,7 +2887,6 @@ int main(int argc, char *argv[])
                 strcpy(folder_address, argv[2]);
                 back_one(folder_address);
                 char type = type_of(name, folder_address);
-                printf("(%s)(%s)", name, folder_address);
                 if (alreadyExists(name, folder_address) == 0)
                 {
                     printf_color("** ", 'y');
@@ -3401,4 +3533,245 @@ int main(int argc, char *argv[])
             }
         }
     }
+    else if (strcmp(argv[1], "revert") == 0)
+    {
+        char message[1000];
+        int flag = 0;
+        if (strcmp(argv[2], "-m") == 0)
+        {
+            strcpy(message, argv[3]);
+            flag = 1;
+        }
+        int commitID;
+        sscanf(argv[argc - 1], "%d", &commitID);
+        char commit_name[1000];
+        commit_ID_to_number_dot_number(commitID, commit_name);
+        int t1, t2;
+        sscanf(commit_name, "commit%d.%d", &t1, &t2);
+        if (check_if_head() == 0)
+        {
+            printf_color("You have to be on head!\n", 'R');
+            return 1;
+        }
+        char commit_address[1000];
+        repoExists(commit_address);
+        forward_one(commit_address, commit_name);
+        char name[1000];
+        cur_commit(name);
+        last_maker(name);
+        char dot_son[1000];
+        repoExists(dot_son);
+        copy_folder(name, commit_address, dot_son);
+        char new_commit_address[1000];
+        repoExists(new_commit_address);
+        forward_one(new_commit_address, name);
+
+        char branch_name[1000];
+        char cur_cm[1000];
+        sprintf(branch_name, "branch%d.txt", current_branch_ID);
+        forward_one(dot_son, branch_name);
+        FILE *c_br = fopen(dot_son, "a");
+        fprintf(c_br, "%s\n", current_commit);
+        fclose(c_br);
+        back_one(dot_son);
+        forward_one(dot_son, "added.txt");
+        FILE *addednew = fopen(dot_son, "w");
+        fclose(addednew);
+        back_one(dot_son);
+        forward_one(dot_son, "commitId.txt");
+        FILE *lastID = fopen(dot_son, "r");
+        char last_line[1000];
+        char tmp[1000];
+        while (fgets(tmp, 1000, lastID) != NULL)
+            strcpy(last_line, tmp);
+        fclose(lastID);
+        int n, junk;
+        sscanf(last_line, "%d", &n);
+        FILE *ID = fopen(dot_son, "a");
+        fprintf(ID, "%d\n", n + 1);
+        fclose(ID);
+        char curr_commit_address[1000];
+        repoExists(curr_commit_address);
+        forward_one(curr_commit_address, "curr_commit.txt");
+        FILE *cr_c = fopen(curr_commit_address, "r");
+        fgets(last_line, 1000, cr_c);
+        if (*(last_line + strlen(last_line) - 1) == '\n')
+            *(last_line + strlen(last_line) - 1) = '\0';
+        fclose(cr_c);
+        int m;
+        sscanf(last_line, "commit%d.%d", &m, &junk);
+        FILE *cr_cm = fopen(curr_commit_address, "w");
+        fprintf(cr_cm, "commit%d.%d", m + 1, current_branch_ID);
+        commit_n_folder(m + 1);
+        fclose(cr_cm);
+
+        char inf_l[1000], inf_c[1000];
+        sprintf(inf_l, "%s", commit_name);
+        sprintf(inf_c, "commit%d.%d", m, current_branch_ID);
+        char infl_address[1000];
+        char infc_address[1000];
+        repoExists(infl_address);
+        repoExists(infc_address);
+        forward_one(infl_address, inf_l);
+        forward_one(infl_address, "commitInfo.txt");
+        forward_one(infc_address, inf_c);
+        copy_file("commitInfo.txt", infl_address, infc_address, 'y');
+
+        char commit_names_in_order[1000];
+        repoExists(commit_names_in_order);
+        forward_one(commit_names_in_order, "orderc.txt");
+        char line[1000];
+        sprintf(line, "commit%d.%d\n", m, current_branch_ID);
+        append_line_at_top(line, commit_names_in_order);
+
+        forward_one(infc_address, "commitInfo.txt");
+        char lines[100][1000];
+        int index = line_separator(lines, infc_address);
+        time_t mytime = time(NULL);
+        char *time_str = ctime(&mytime);
+        time_str[strlen(time_str) - 1] = '\0';
+        strcpy(time_str, time_str + 4);
+        if (username_read(name) == 1)
+            exit(1);
+        sprintf(lines[0], "%d\n", n);
+        strcpy(lines[2], name);
+        strcat(lines[2], "\n");
+        strcpy(lines[3], time_str);
+        strcat(lines[3], "\n");
+        sprintf(lines[4], "%d\n", t2);
+
+        if (flag == 1)
+        {
+            strcpy(lines[1], message);
+            strcat(lines[1], "\n");
+        }
+        FILE *infc = fopen(infc_address, "w");
+        for (int i = 0; i < index; i++)
+            fprintf(infc, "%s", lines[i]);
+        fclose(infc);
+
+        printf_color("Successful revert to commitID ", 'g');
+        change_color('G');
+        printf("%d", commitID);
+        reset_color();
+        return 0;
+    }
+    else if (strcmp(argv[1], "grep") == 0)
+    {
+        char word[1000], file_address[1000];
+        int commitID, n_exists = 0, c_exists = 0;
+        for (int i = 2; i < argc - 1; i++)
+        {
+            if (strcmp(argv[i], "-f") == 0)
+            {
+                strcpy(file_address, argv[i + 1]);
+                address_converter(file_address);
+            }
+            if (strcmp(argv[i], "-n") == 0)
+                n_exists = 1;
+            if (strcmp(argv[i], "-p") == 0)
+                strcpy(word, argv[i + 1]);
+            if (strcmp(argv[i], "-c") == 0)
+            {
+                sscanf(argv[i + 1], "%d", &commitID);
+                c_exists = 1;
+            }
+        }
+        int *line_numbers = (int *)malloc(100 * sizeof(int));
+        int index = grep_file(word, file_address, line_numbers);
+        char lines[100][1000];
+        char name[1000];
+        strcpy(name, file_address);
+        last_maker(name);
+        line_separator(lines, file_address);
+        for (int i = 0; i < index; i++)
+        {
+            printf_color("====================================\n", 'p');
+            change_color('b');
+            printf("File --> %s", name);
+            if (n_exists == 1)
+                printf(" - Line --> %d\n", *(line_numbers + i));
+            else
+                printf("\n");
+            change_color('g');
+            printf("Line: \"%s\"\n", lines[line_numbers[i] - 1]);
+            printf_color("====================================\n\n", 'p');
+        }
+    }
+    else if (strcmp(argv[1], "pre-commit") == 0)
+    {
+        char app_address[1000];
+        repoExists(app_address);
+        forward_one(app_address, "app.txt");
+        if (strcmp(argv[2], "hooks") == 0 && strcmp(argv[3], "list") == 0)
+        {
+            printf_color("Hooks List:\n", 'b');
+            for (int i = 0; i < ind; i++)
+            {
+                change_color('y');
+                printf("%d --> %s\n", i + 1, hooks[i]);
+                reset_color();
+            }
+            return 0;
+        }
+        else if (strcmp(argv[2], "applied") == 0 && strcmp(argv[3], "hooks") == 0)
+        {
+            FILE *app_h = fopen(app_address, "r");
+            char line[1000];
+            int in = 0;
+            char apps[100][1000];
+            while (fgets(line, 1000, app_h) != NULL)
+            {
+                if (*(line + strlen(line) - 1) == '\n')
+                    *(line + strlen(line) - 1) = '\0';
+                strcpy(apps[in], line);
+                in++;
+            }
+            if (in == 0)
+            {
+                printf_color("No hooks appliied yet!\n", 'Y');
+                return 1;
+            }
+            printf_color("Applied hooks:\n", 'b');
+            for (int i = 0; i < in; i++)
+            {
+                change_color('y');
+                printf("%d --> %s\n", in + 1, apps[i]);
+                reset_color();
+            }
+            return 0;
+        }
+        else if (strcmp(argv[2], "add") == 0 && strcmp(argv[3], "hook") == 0)
+        {
+            char check_address[1000];
+            repoExists(check_address);
+            forward_one(check_address, "pre.txt");
+            char hookID[1000];
+            strcpy(hookID, argv[4]);
+            if (line_exists(check_address, hookID) == 1)
+            {
+                FILE *app_h = fopen(app_address, "a");
+                fprintf(app_h, "%s\n", hookID);
+                fclose(app_h);
+                printf_color("Hook added!\n", 'G');
+            }
+            else
+            {
+                printf_color("Such hook doesn't exist!\n", 'Y');
+                return 1;
+            }
+            return 0;
+        }
+        else if (strcmp(argv[2], "remove") == 0 && strcmp(argv[3], "hook") == 0)
+        {
+            char hookID[1000];
+            strcpy(hookID, argv[4]);
+            if (delete_line(hookID, app_address) == 0)
+                printf_color("Hook remove!\n", 'G');
+            else
+                printf_color("Hook doesn't exist!\n", 'R');
+            return 0;
+        }
+    }
+    return 0;
 }
